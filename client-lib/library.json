@@ -1,0 +1,19 @@
+{
+    "name": "secure-iot-client-libs",
+    "version": "0.1.0",
+    "keywords": "iot, security, encryption",
+    "description": "Library that handles encryption for IOT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DavyLandman/secure-local-iot-network"
+    },
+    "include" : "client-lib/",
+    "exclude" : [
+        "user_config.h",
+        "demo.cpp"
+    ]
+    "platforms": [
+        "espressif8266"
+    ],
+    "frameworks" : "*"
+}
