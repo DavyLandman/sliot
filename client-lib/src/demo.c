@@ -1,9 +1,3 @@
-#ifdef ARDUINO
-#include <Arduino.h>
-
-void setup() {}
-void loop() {}
-#else
 #include "osapi.h"
 #include "user_interface.h"
 uint32 ICACHE_FLASH_ATTR user_rf_cal_sector_set(void)
@@ -33,5 +27,3 @@ uint32 ICACHE_FLASH_ATTR user_rf_cal_sector_set(void)
 
 }
 void ICACHE_FLASH_ATTR user_init(void) {}
-
-#endif
