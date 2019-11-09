@@ -76,7 +76,7 @@ void siot_handshake_execute(const struct siot_config *cfg, void (*done)(uint8_t 
 
     current_config = cfg;
     handshake_done = done;
-    esp_now_send(cfg->server_receiving_mac, (const u8*)((const void*)&msg), sizeof(msg));
+    esp_now_send((u8*)cfg->server_receiving_mac, ((void*)&msg), sizeof(msg));
 }
 
 struct PACKED messageHeader {
@@ -87,7 +87,7 @@ struct PACKED messageHeader {
 };
 
 void siot_send(const struct siot_config *cfg, uint8_t shared_key[32], uint16_t counter, void* data, size_t length, void (*send)(void), void (*fail)(void)) {
-    uint8_t message[150] CRYPTO_ALIGNMENT; // max message size
+    uint8_t message[200] CRYPTO_ALIGNMENT; // max message size
     if (length > (sizeof(message) - sizeof(struct messageHeader))) {
         return;
     }
@@ -97,12 +97,12 @@ void siot_send(const struct siot_config *cfg, uint8_t shared_key[32], uint16_t c
 
     while (os_get_random(header->nonce, sizeof(header->nonce)) != 0);
     system_soft_wdt_feed();
-    crypto_lock_aead(header->mac, message + sizeof(struct messageHeader), shared_key, header->nonce, &header->counter, sizeof(header->counter), data, length);
+    crypto_lock_aead(header->mac, message + sizeof(struct messageHeader), shared_key, header->nonce, (const void *) &header->counter, sizeof(header->counter), data, length);
     system_soft_wdt_feed();
 
     send_success = send;
     send_failure = fail;
-    esp_now_send(cfg->server_receiving_mac, message, length + sizeof(struct messageHeader));
+    esp_now_send((u8*)cfg->server_receiving_mac, message, length + sizeof(struct messageHeader));
 }
 
 
@@ -130,10 +130,10 @@ void siot_init_espnow(const struct siot_config *cfg) {
     if (esp_now_register_send_cb(&send_handler) != ESP_OK) {
         return;
     }
-    if (esp_now_add_peer(cfg->server_sending_mac, ESP_NOW_ROLE_CONTROLLER, 1, NULL, 0) != ESP_OK) {
+    if (esp_now_add_peer((u8*)cfg->server_sending_mac, ESP_NOW_ROLE_CONTROLLER, 1, NULL, 0) != ESP_OK) {
         return;
     }
-    if (esp_now_add_peer(cfg->server_receiving_mac, ESP_NOW_ROLE_SLAVE, 1, NULL, 0) != ESP_OK) {
+    if (esp_now_add_peer((u8*)cfg->server_receiving_mac, ESP_NOW_ROLE_SLAVE, 1, NULL, 0) != ESP_OK) {
         return;
     }
 }
