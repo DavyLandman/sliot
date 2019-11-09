@@ -8,8 +8,7 @@ struct siot_config{
     uint8_t long_term_secret[32];
     uint8_t long_term_public[32];
     uint8_t server_long_term_public[32];
-    uint8_t server_sending_mac[6];
-    uint8_t server_receiving_mac[6];
+    uint8_t server_mac[6];
 };
 
 

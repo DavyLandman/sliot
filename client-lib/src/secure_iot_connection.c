@@ -76,7 +76,7 @@ void siot_handshake_execute(const struct siot_config *cfg, void (*done)(uint8_t 
 
     current_config = cfg;
     handshake_done = done;
-    esp_now_send((u8*)cfg->server_receiving_mac, ((void*)&msg), sizeof(msg));
+    esp_now_send((u8*)cfg->server_mac, ((void*)&msg), sizeof(msg));
 }
 
 struct PACKED messageHeader {
@@ -102,13 +102,13 @@ void siot_send(const struct siot_config *cfg, uint8_t shared_key[32], uint16_t c
 
     send_success = send;
     send_failure = fail;
-    esp_now_send((u8*)cfg->server_receiving_mac, message, length + sizeof(struct messageHeader));
+    esp_now_send((u8*)cfg->server_mac, message, length + sizeof(struct messageHeader));
 }
 
 
 void siot_init_espnow(const struct siot_config *cfg) {
     // wakeup WIFI in in receiving mode
-    wifi_set_opmode_current(SOFTAP_MODE);
+    wifi_set_opmode_current(STATIONAP_MODE);
     struct softap_config config;
     config.ssid[0] = '\0';
     config.ssid_len = 0;
@@ -130,10 +130,7 @@ void siot_init_espnow(const struct siot_config *cfg) {
     if (esp_now_register_send_cb(&send_handler) != ESP_OK) {
         return;
     }
-    if (esp_now_add_peer((u8*)cfg->server_sending_mac, ESP_NOW_ROLE_CONTROLLER, 1, NULL, 0) != ESP_OK) {
-        return;
-    }
-    if (esp_now_add_peer((u8*)cfg->server_receiving_mac, ESP_NOW_ROLE_SLAVE, 1, NULL, 0) != ESP_OK) {
+    if (esp_now_add_peer((u8*)cfg->server_mac, ESP_NOW_ROLE_COMBO, 1, NULL, 0) != ESP_OK) {
         return;
     }
 }
