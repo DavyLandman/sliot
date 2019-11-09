@@ -11,7 +11,10 @@
     "exclude" : [
         "user_config.h",
         "demo.cpp"
-    ]
+    ],
+    "depends": [
+        "Monocypher"
+    ],
     "platforms": [
         "espressif8266"
     ],
