@@ -106,6 +106,7 @@ void siot_send(const struct siot_config *cfg, uint8_t shared_key[32], uint16_t c
 }
 
 
+// TODO: depending on either mode (key exchange or just pure sending) we need to be in a different role, maybe the init should be called from the siot_send and siot_keyexchange code?
 void siot_init_espnow(const struct siot_config *cfg) {
     // wakeup WIFI in in receiving mode
     wifi_set_opmode_current(STATIONAP_MODE);
