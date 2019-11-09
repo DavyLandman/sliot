@@ -80,9 +80,9 @@ void siot_handshake_execute(const struct siot_config *cfg, void (*done)(uint8_t 
 }
 
 struct PACKED messageHeader {
-    uint16_t counter;
     uint8_t nonce[24];
     uint8_t mac[16];
+    uint16_t counter;
     uint8_t msg_size;
 };
 
