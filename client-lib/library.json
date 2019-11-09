@@ -7,7 +7,7 @@
         "type": "git",
         "url": "https://github.com/DavyLandman/secure-local-iot-network"
     },
-    "include" : "client-lib/",
+    "include" : "src/",
     "exclude" : [
         "user_config.h",
         "demo.cpp"
