@@ -32,19 +32,20 @@ static void handle_dh_reply(const struct signed_key_message *msg) {
         uint8_t shared_secret[32];
         crypto_key_exchange(shared_secret, dh_private, msg->public_key);
         system_soft_wdt_feed();
-        memset(dh_private, 0, sizeof(dh_private));
+        crypto_wipe(dh_private, sizeof(dh_private));
 
         crypto_blake2b_ctx ctx;
-        crypto_blake2b_general_init(&ctx, 32, NULL, 0);
-        crypto_blake2b_update(&ctx, shared_secret, 32);
-        crypto_blake2b_update(&ctx, current_config->server_long_term_public, 32);
-        crypto_blake2b_update(&ctx, current_config->long_term_public, 32);
-        crypto_blake2b_final(shared_secret);
+        crypto_blake2b_general_init(&ctx, sizeof(shared_secret), NULL, 0);
+        crypto_blake2b_update(&ctx, shared_secret, sizeof(shared_secret));
+        crypto_blake2b_update(&ctx, current_config->server_long_term_public, sizeof(current_config->server_long_term_public));
+        crypto_blake2b_update(&ctx, current_config->long_term_public, sizeof(current_config->long_term_public));
+        system_soft_wdt_feed();
+        crypto_blake2b_final(&ctx, shared_secret);
 
         handshake_done(shared_secret);
         handshake_done = NULL;
         system_soft_wdt_feed();
-        memset(shared_secret, 0, sizeof(shared_secret));
+        crypto_wipe(shared_secret, sizeof(shared_secret));
     }
 }
 
