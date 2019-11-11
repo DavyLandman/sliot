@@ -28,14 +28,23 @@ static void handle_dh_reply(const struct signed_key_message *msg) {
     system_soft_wdt_feed();
     if (crypto_check(msg->signature, current_config->server_long_term_public, msg->public_key, sizeof(msg->public_key))) {
         system_soft_wdt_feed();
-        uint8_t shared_key[32];
-        crypto_key_exchange(shared_key, dh_private, msg->public_key);
+
+        uint8_t shared_secret[32];
+        crypto_key_exchange(shared_secret, dh_private, msg->public_key);
         system_soft_wdt_feed();
         memset(dh_private, 0, sizeof(dh_private));
-        handshake_done(shared_key);
+
+        crypto_blake2b_ctx ctx;
+        crypto_blake2b_general_init(&ctx, 32, NULL, 0);
+        crypto_blake2b_update(&ctx, shared_secret, 32);
+        crypto_blake2b_update(&ctx, current_config->server_long_term_public, 32);
+        crypto_blake2b_update(&ctx, current_config->long_term_public, 32);
+        crypto_blake2b_final(shared_secret);
+
+        handshake_done(shared_secret);
         handshake_done = NULL;
         system_soft_wdt_feed();
-        memset(shared_key, 0, sizeof(dh_private));
+        memset(shared_secret, 0, sizeof(shared_secret));
     }
 }
 
