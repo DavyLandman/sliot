@@ -10,8 +10,15 @@
 #define CRYPTO_ALIGNMENT __attribute__((aligned(4)))
 #define PACKED __attribute__((__packed__))
 
+enum MessageKind {
+    INVALID = 0,
+    DH_EXCHANGE = 0x01,
+    MESSAGE = 0x02
+};
+
 
 struct PACKED signed_key_message {
+    uint8_t kind;
     uint8_t signature[64];
     uint8_t public_key[32];
 };
@@ -79,6 +86,7 @@ void siot_handshake_execute(const struct siot_config *cfg, void (*done)(uint8_t 
 
     system_soft_wdt_feed();
     struct signed_key_message msg;
+    msg.kind = DH_EXCHANGE;
     crypto_key_exchange_public_key(msg.public_key, dh_private);
     system_soft_wdt_feed();
     crypto_sign(msg.signature, cfg->long_term_secret, cfg->long_term_public, msg.public_key, sizeof(msg.public_key));
@@ -90,10 +98,11 @@ void siot_handshake_execute(const struct siot_config *cfg, void (*done)(uint8_t 
 }
 
 struct PACKED messageHeader {
-    uint8_t nonce[24];
-    uint8_t mac[16];
+    uint8_t kind;
     uint16_t counter;
     uint8_t msg_size;
+    uint8_t nonce[24];
+    uint8_t mac[16];
 };
 
 void siot_send(const struct siot_config *cfg, uint8_t shared_key[32], uint16_t counter, void* data, size_t length, void (*send)(void), void (*fail)(void)) {
@@ -102,6 +111,7 @@ void siot_send(const struct siot_config *cfg, uint8_t shared_key[32], uint16_t c
         return;
     }
     struct messageHeader *header = (void *)message;
+    header->kind = MESSAGE;
     header->counter = counter;
     header->msg_size = length;
 
