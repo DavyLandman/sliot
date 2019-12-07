@@ -8,7 +8,7 @@ import "unsafe"
 
 func UnlockAEAD(ciphertext, nonce, key, mac, ad []byte) (plaintext []byte) {
 	/*
-	int crypto_unlock(uint8_t       *plain_text,
+	int crypto_unlock_aead(uint8_t       *plain_text,
 					const uint8_t  key[32],
 					const uint8_t  nonce[24],
 					const uint8_t  mac[16],
