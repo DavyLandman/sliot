@@ -7,9 +7,6 @@
 			"path": "client-lib"
 		},
 		{
-			"path": "espnow-proxy"
-		},
-		{
 			"path": "client\\temperature"
 		}
 	]
