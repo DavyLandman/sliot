@@ -99,7 +99,7 @@ void siot_handshake_execute(const struct siot_config *cfg, void (*done)(uint8_t 
 
 struct PACKED messageHeader {
     uint8_t kind;
-    uint16_t counter;
+    uint8_t counter[2];
     uint8_t msg_size;
     uint8_t nonce[24];
     uint8_t mac[16];
@@ -112,7 +112,8 @@ void siot_send(const struct siot_config *cfg, uint8_t shared_key[32], uint16_t c
     }
     struct messageHeader *header = (void *)message;
     header->kind = MESSAGE;
-    header->counter = counter;
+    header->counter[0] = counter & 0xFF;
+    header->counter[1] = (counter >> 8) & 0xFF;
     header->msg_size = length;
 
     while (os_get_random(header->nonce, sizeof(header->nonce)) != 0);
