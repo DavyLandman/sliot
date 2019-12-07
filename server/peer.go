@@ -19,13 +19,13 @@ func (struct Peer* p) Initialize(mac [6]byte, publicKey []byte) {
 	p.last_counter = 0
 }
 
-func (struct Peer *p) GetId() uint64 {
-	return p.mac[0] 
-		| p.mac[1] << 8
-		| p.mac[2] << 16
-		| p.mac[3] << 24
-		| p.mac[4] << 32
-		| p.mac[5] << 40
+func MacToId(mac [6]byte) uint64 {
+	return mac[0] 
+		| mac[1] << 8
+		| mac[2] << 16
+		| mac[3] << 24
+		| mac[4] << 32
+		| mac[5] << 40
 		| 0x42 << 48
 }
 
