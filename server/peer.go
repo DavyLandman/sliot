@@ -7,13 +7,13 @@ import (
 )
 
 type Peer struct {
-	Mac byte[6]
-	PublicKey byte[]
-	sessionKey byte[]
+	Mac [6]byte
+	PublicKey []byte
+	sessionKey []byte
 	lastCounter uint32 
 }
 
-func (struct Peer* p) Initialize(mac byte[6], publicKey byte[]) {
+func (struct Peer* p) Initialize(mac [6]byte, publicKey []byte) {
 	copy(p.Mac[:], mac[:])
 	copy(p.PublicKey, publicKey)
 	p.last_counter = 0
@@ -29,7 +29,7 @@ func (struct Peer *p) GetId() uint64 {
 		| 0x42 << 48
 }
 
-func (struct Peer* p) KeyExchangeReply(receivedPublic, receivedSignature  byte[], server struct Server) (publicKey, signature byte[]) {
+func (struct Peer* p) KeyExchangeReply(receivedPublic, receivedSignature  []byte, server struct Server) (publicKey, signature []byte) {
 	if monocypher.Verify(receivedSignature, receivedPublic, p.signingKey) {
 		private := make([]byte, 32)
 		rand.Read(private)
