@@ -33,7 +33,7 @@ static void (*send_failure)(void) = NULL;
 
 static void handle_dh_reply(const struct signed_key_message *msg) {
     system_soft_wdt_feed();
-    if (crypto_check(msg->signature, current_config->server_long_term_public, msg->public_key, sizeof(msg->public_key))) {
+    if (crypto_check(msg->signature, current_config->server_long_term_public, msg->public_key, sizeof(msg->public_key)) == 0) {
         system_soft_wdt_feed();
 
         uint8_t shared_secret[32];
