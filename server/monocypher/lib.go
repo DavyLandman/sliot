@@ -13,21 +13,13 @@ const (
 	PublicKeySize = 32
 	AEADKeySize = 32
 	PrivateKeySize = 32
+	SharedKeySize = 32
 	SignatureSize = 64
 	NonceSize = 24
 	MACSize = 16
 )
 
 func UnlockAEAD(ciphertext, nonce, key, mac, ad []byte) (plaintext []byte) {
-	/*
-			int crypto_unlock_aead(uint8_t       *plain_text,
-							const uint8_t  key[32],
-							const uint8_t  nonce[24],
-							const uint8_t  mac[16],
-		                    const uint8_t *ad         , size_t ad_size,
-							const uint8_t *cipher_text, size_t text_size);
-	*/
-
 	CSize := (C.size_t)(len(ciphertext))
 	CCipher := (*C.uint8_t)(unsafe.Pointer(C.CBytes(ciphertext)))
 	defer C.free(unsafe.Pointer(CCipher))
@@ -37,7 +29,7 @@ func UnlockAEAD(ciphertext, nonce, key, mac, ad []byte) (plaintext []byte) {
 	defer C.free(unsafe.Pointer(CAD))
 
 	CKey := (*C.uint8_t)(unsafe.Pointer(C.CBytes([]uint8(key[:AEADKeySize]))))
-	defer C.free(unsafe.Pointer(CKey))
+	defer clearAndFree(unsafe.Pointer(CKey), AEADKeySize)
 
 	CNonce := (*C.uint8_t)(unsafe.Pointer(C.CBytes([]uint8(nonce[:NonceSize]))))
 	defer C.free(unsafe.Pointer(CNonce))
@@ -45,10 +37,10 @@ func UnlockAEAD(ciphertext, nonce, key, mac, ad []byte) (plaintext []byte) {
 	CMac := (*C.uint8_t)(unsafe.Pointer(C.CBytes([]uint8(mac[:MACSize]))))
 	defer C.free(unsafe.Pointer(CMac))
 
-	CPlain := (*C.uint8_t)(unsafe.Pointer(C.CBytes(make([]uint8, len(ciphertext)))))
-	defer C.free(unsafe.Pointer(CPlain))
+	CPlain := (*C.uint8_t)(C.CBytes(make([]uint8, len(ciphertext))))
+	defer clearAndFree(unsafe.Pointer(CPlain), len(ciphertext))
 	//	C Method call
-	if C.crypto_unlock_aead(CPlain, CKey, CNonce, CMac, CAD, CADSize, CCipher, CSize) == 0 {
+	if C.crypto_unlock_aead(CPlain, CKey, CNonce, CMac, CAD, CADSize, CCipher, CSize) == C.int(0) {
 		return C.GoBytes(unsafe.Pointer(CPlain), C.int(len(ciphertext)))
 	}
 
@@ -57,7 +49,7 @@ func UnlockAEAD(ciphertext, nonce, key, mac, ad []byte) (plaintext []byte) {
 
 func KeyExchangePublicKey(secretKey []byte) (publicKey []byte) {
 	CKey := (*C.uint8_t)(unsafe.Pointer(C.CBytes([]uint8(secretKey[:PrivateKeySize]))))
-	defer C.free(unsafe.Pointer(CKey))
+	defer clearAndFree(unsafe.Pointer(CKey), PrivateKeySize)
 
 	CPublic := (*C.uint8_t)(unsafe.Pointer(C.CBytes(make([]uint8, PublicKeySize))))
 	defer C.free(unsafe.Pointer(CPublic))
@@ -68,22 +60,24 @@ func KeyExchangePublicKey(secretKey []byte) (publicKey []byte) {
 
 func KeyExchange(ourSecretKey, theirPublicKey []byte) (sharedKey []byte) {
 	CKey := (*C.uint8_t)(unsafe.Pointer(C.CBytes([]uint8(ourSecretKey[:PrivateKeySize]))))
-	defer C.free(unsafe.Pointer(CKey))
+	defer clearAndFree(unsafe.Pointer(CKey), PrivateKeySize)
 
 	CTheir := (*C.uint8_t)(unsafe.Pointer(C.CBytes([]uint8(theirPublicKey[:PublicKeySize]))))
 	defer C.free(unsafe.Pointer(CTheir))
 
-	CShared := (*C.uint8_t)(unsafe.Pointer(C.CBytes(make([]uint8, 32))))
-	defer C.free(unsafe.Pointer(CShared))
+	CShared := (*C.uint8_t)(C.CBytes(make([]uint8, SharedKeySize)))
+	defer clearAndFree(unsafe.Pointer(CShared), SharedKeySize)
 
-	C.crypto_key_exchange(CShared, CKey, CTheir)
+	if C.crypto_key_exchange(CShared, CKey, CTheir) == C.int(0) {
+		return C.GoBytes(unsafe.Pointer(CShared), C.int(SharedKeySize))
+	}
+	return nil
 
-	return C.GoBytes(unsafe.Pointer(CShared), C.int(32))
 }
 
 func SignPublicKey(secretKey []byte) (publicKey []byte) {
 	CKey := (*C.uint8_t)(unsafe.Pointer(C.CBytes([]uint8(secretKey[:PrivateKeySize]))))
-	defer C.free(unsafe.Pointer(CKey))
+	defer clearAndFree(unsafe.Pointer(CKey), PrivateKeySize)
 
 	CPublic := (*C.uint8_t)(unsafe.Pointer(C.CBytes(make([]uint8, PublicKeySize))))
 	defer C.free(unsafe.Pointer(CPublic))
@@ -94,7 +88,7 @@ func SignPublicKey(secretKey []byte) (publicKey []byte) {
 
 func Sign(secretKey, message []byte) (signature []byte) {
 	CKey := (*C.uint8_t)(unsafe.Pointer(C.CBytes([]uint8(secretKey[:PrivateKeySize]))))
-	defer C.free(unsafe.Pointer(CKey))
+	defer clearAndFree(unsafe.Pointer(CKey), PrivateKeySize)
 
 	CSize := (C.size_t)(len(message))
 	CMessage := (*C.uint8_t)(unsafe.Pointer(C.CBytes(message)))
@@ -119,4 +113,10 @@ func Verify(signature, publicKey, message []byte) bool {
 	defer C.free(unsafe.Pointer(CSignature))
 
 	return C.int(1) == C.crypto_check(CSignature, CKey, CMessage, CSize)
+}
+
+
+func clearAndFree(target unsafe.Pointer, size int) {
+	C.crypto_wipe(target, C.size_t(size))
+	C.free(target)
 }
