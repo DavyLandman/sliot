@@ -80,7 +80,7 @@ func byteArray(bytes []byte) string {
 		if !first {
 			result.WriteString(",")
 		}
-		result.WriteString(fmt.Sprintf("0x%x", b))
+		result.WriteString(fmt.Sprintf("0x%02x", b))
 		first = false
 	}
 	result.WriteString("}")
