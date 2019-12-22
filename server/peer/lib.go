@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20poly1305"
+	"io"
 
 	"siot-server/monocypher"
 	"siot-server/server"
@@ -77,21 +78,25 @@ type privatePeerData struct {
 	LastCounter uint32
 }
 
-func (p Peer) SaveSession() ([]byte, error) {
+func (p Peer) SaveSession(target io.Writer) error {
 	var rawMessage bytes.Buffer
 	err := gob.NewEncoder(&rawMessage).Encode(privatePeerData{p.sessionKey, p.lastCounter})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	cipher, err := chacha20poly1305.NewX(p.sessionKey)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	nonce := make([]byte, cipher.NonceSize())
 	rand.Read(nonce)
+	_, err = target.Write(nonce)
+	if err != nil {
+		return err
+	}
 
-	// we append the nonce with the encrypted data
-	return cipher.Seal(nonce, nonce, rawMessage.Bytes(), p.PublicKey)
+	_, err = target.Write(cipher.Seal(nil, nonce, rawMessage.Bytes(), p.PublicKey))
+	return err
 }
 
 func (p *Peer) RestoreSession(data []byte) error {
