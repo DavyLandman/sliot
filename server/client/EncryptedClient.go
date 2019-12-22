@@ -1,4 +1,4 @@
-package peer
+package client
 
 import (
 	"bytes"
@@ -12,38 +12,27 @@ import (
 	"siot-server/server"
 )
 
-type Peer struct {
+type EncryptedClient struct {
 	Mac         [6]byte
 	PublicKey   []byte
 	sessionKey  []byte
 	lastCounter uint32
-	gobKey      []byte
 }
 
-func (p *Peer) Initialize(mac [6]byte, publicKey []byte, gobKey []byte) {
+func (p *EncryptedClient) Initialize(mac [6]byte, publicKey []byte) {
 	copy(p.Mac[:], mac[:])
 	copy(p.PublicKey, publicKey)
-	copy(p.gobKey, gobKey)
 	p.lastCounter = 0
 }
 
-func MacToId(mac [6]byte) uint64 {
-	return uint64(mac[0]) |
-		uint64(mac[1])<<8 |
-		uint64(mac[2])<<16 |
-		uint64(mac[3])<<24 |
-		uint64(mac[4])<<32 |
-		uint64(mac[5])<<40
-}
-
-func (p *Peer) KeyExchangeReply(receivedPublic, receivedSignature []byte, srv *server.Server) (publicKey, signature []byte) {
+func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature []byte, srv *server.Server) (publicKey, signature []byte) {
 	if monocypher.Verify(receivedSignature, receivedPublic, p.PublicKey) {
-		private := make([]byte, 32)
+		private := make([]byte, monocypher.PrivateKeySize)
 		rand.Read(private)
 		publicKey := monocypher.KeyExchangePublicKey(private)
 		sharedSecret := monocypher.KeyExchange(private, receivedPublic)
 
-		hasher, _ := blake2b.New(32, nil)
+		hasher, _ := blake2b.New(monocypher.AEADKeySize, nil)
 		hasher.Write(sharedSecret)
 		hasher.Write(srv.PublicKey)
 		hasher.Write(p.PublicKey)
@@ -61,7 +50,7 @@ func (p *Peer) KeyExchangeReply(receivedPublic, receivedSignature []byte, srv *s
 	return nil, nil
 }
 
-func (p *Peer) DecryptMessage(message, counter, nonce, mac []byte) (plaintext []byte) {
+func (p *EncryptedClient) DecryptMessage(message, counter, nonce, mac []byte) (plaintext []byte) {
 	counterFull := uint32(counter[0]) | uint32(counter[1])<<8
 	if counterFull > p.lastCounter {
 		result := monocypher.UnlockAEAD(message, nonce, p.sessionKey, mac, counter)
@@ -78,13 +67,13 @@ type privatePeerData struct {
 	LastCounter uint32
 }
 
-func (p Peer) SaveSession(target io.Writer) error {
+func (p EncryptedClient) SaveSession(target io.Writer, dataKey []byte) error {
 	var rawMessage bytes.Buffer
 	err := gob.NewEncoder(&rawMessage).Encode(privatePeerData{p.sessionKey, p.lastCounter})
 	if err != nil {
 		return err
 	}
-	cipher, err := chacha20poly1305.NewX(p.sessionKey)
+	cipher, err := chacha20poly1305.NewX(dataKey)
 	if err != nil {
 		return err
 	}
@@ -99,15 +88,29 @@ func (p Peer) SaveSession(target io.Writer) error {
 	return err
 }
 
-func (p *Peer) RestoreSession(data []byte) error {
-	cipher, err := chacha20poly1305.NewX(p.sessionKey)
+func (p *EncryptedClient) RestoreSession(source io.Reader, dataKey []byte) error {
+	cipher, err := chacha20poly1305.NewX(dataKey)
 	if err != nil {
 		return err
 	}
-	decrypted, err := cipher.Open(nil, data[:cipher.NonceSize()], data[cipher.NonceSize():], p.PublicKey)
+
+	nonce := make([]byte, cipher.NonceSize())
+	_, err = source.Read(nonce)
 	if err != nil {
 		return err
 	}
+
+	var cipherText bytes.Buffer
+	_, err = cipherText.ReadFrom(source)
+	if err != nil {
+		return err
+	}
+
+	decrypted, err := cipher.Open(nil, nonce, cipherText.Bytes(), p.PublicKey)
+	if err != nil {
+		return err
+	}
+
 	var serializedData privatePeerData
 	err = gob.NewDecoder(bytes.NewBuffer(decrypted)).Decode(&serializedData)
 	if err != nil {

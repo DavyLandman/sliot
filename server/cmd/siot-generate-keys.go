@@ -6,12 +6,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/chacha20poly1305"
 
 	"siot-server/monocypher"
+	"siot-server/config"
 )
 
 func main() {
@@ -88,14 +88,9 @@ func byteArray(bytes []byte) string {
 }
 
 func macByteArray(mac string) string {
-	asBytes := make([]byte, 6)
-	chunks := strings.Split(mac, ":")
-	for i := 0; i < 6; i++ {
-		macChunk, err := strconv.ParseUint(chunks[i], 16, 8)
-		if err != nil {
-			log.Fatalf("Error converting mac array: %v", err)
-		}
-		asBytes[i] = byte(macChunk)
+	asBytes, err := config.ParseMacString(mac)
+	if err != nil {
+		log.Fatalf("Error converting mac array: %v", err)
 	}
-	return byteArray(asBytes)
+	return byteArray(asBytes[:])
 }
