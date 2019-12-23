@@ -1,34 +1,39 @@
 package server
 
 import (
+	"crypto"
+	"io"
 	"log"
-	"os"
 	"siot-server/client"
-	"siot-server/config"
+	"siot-server/monocypher"
 
 	espnow "github.com/DavyLandman/espnow-bridge"
-	"siot-server/monocypher"
 )
 
 type Server struct {
 	PublicKey  []byte
 	privateKey []byte
-	config     *config.ClientConfig
+	inbox      chan client.Message
 	stopped    chan bool
 	bridge     *espnow.Bridge
-	newData    chan client.ReceivedData
 	clients    map[uint64]*client.Client
 }
 
-func Start(configFile, dataPath string, dataKey, privateKey, publicKey []byte, bridge *espnow.Bridge) (*Server, error) {
+type ClientConfig struct {
+	Mac         [6]byte
+	PublicKey   []byte
+	WifiChannel int
+}
+
+func Start(clients []ClientConfig, dataPath string, dataKey, privateKey, publicKey []byte, bridge *espnow.Bridge) (*Server, error) {
 	var result Server
 	result.bridge = bridge
 	copy(result.PublicKey, publicKey)
 	copy(result.privateKey, privateKey)
 	result.stopped = make(chan bool)
-	result.newData = make(chan client.ReceivedData, 1024)
+	result.inbox = make(chan client.Message, 1024)
 
-	err := result.load(configFile, dataPath, dataKey)
+	err := result.load(clients, dataPath, dataKey)
 	if err != nil {
 		result.Close()
 		return nil, err
@@ -46,7 +51,11 @@ func (s *Server) Close() {
 			c.Close()
 		}
 	}
+	close(s.inbox)
+}
 
+func (s *Server) GetInbox() chan<- client.Message {
+	return s.inbox
 }
 
 func (s *Server) forwardIncoming() {
@@ -71,25 +80,11 @@ func (s *Server) forwardIncoming() {
 	}
 }
 
-func (s *Server) load(configFile, dataPath string, dataKey []byte) error {
-	file, err := os.Open(configFile)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	newConfig, err := config.ReadConfig(file)
-	if err != nil {
-		return err
-	}
-	s.config = newConfig
+func (s *Server) load(clients []ClientConfig, dataPath string, dataKey []byte) error {
 	s.clients = make(map[uint64]*client.Client)
-	for _, c := range newConfig.Clients {
-		mac, err := c.GetByteMac()
-		if err != nil {
-			return err
-		}
-		id := client.MacToId(mac)
-		newClient, err := client.NewClient(dataPath, dataKey, &c, s.bridge.Outbox, s.newData, s)
+	for _, c := range clients {
+		id := client.MacToId(c.Mac)
+		newClient, err := client.NewClient(dataPath, dataKey, c.Mac, c.PublicKey, c.WifiChannel, s.bridge.Outbox, s.inbox, s)
 		if err != nil {
 			return err
 		}
@@ -99,6 +94,10 @@ func (s *Server) load(configFile, dataPath string, dataKey []byte) error {
 	return nil
 }
 
-func (s *Server) Sign(msg []byte) []byte {
-	return monocypher.Sign(s.privateKey, msg)
+func (s *Server) Public() crypto.PublicKey {
+	return s.PublicKey
+}
+
+func (s *Server) Sign(rand io.Reader, msg []byte, opts crypto.SignerOpts) (signature []byte, err error) {
+	return monocypher.Sign(s.privateKey, msg), nil
 }

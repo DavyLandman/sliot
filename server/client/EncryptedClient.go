@@ -9,7 +9,6 @@ import (
 	"io"
 
 	"siot-server/monocypher"
-	"siot-server/server"
 )
 
 type EncryptedClient struct {
@@ -25,7 +24,7 @@ func (p *EncryptedClient) Initialize(mac [6]byte, publicKey []byte) {
 	p.lastCounter = 0
 }
 
-func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature []byte, srv *server.Server) (publicKey, signature []byte) {
+func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature, serverPublic []byte) (publicKey []byte) {
 	if monocypher.Verify(receivedSignature, receivedPublic, p.PublicKey) {
 		private := make([]byte, monocypher.PrivateKeySize)
 		rand.Read(private)
@@ -34,7 +33,7 @@ func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature []b
 
 		hasher, _ := blake2b.New(monocypher.AEADKeySize, nil)
 		hasher.Write(sharedSecret)
-		hasher.Write(srv.PublicKey)
+		hasher.Write(serverPublic)
 		hasher.Write(p.PublicKey)
 
 		p.sessionKey = hasher.Sum(nil)
@@ -45,9 +44,9 @@ func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature []b
 		rand.Read(private)
 		rand.Read(sharedSecret)
 
-		return publicKey, srv.Sign(publicKey)
+		return publicKey
 	}
-	return nil, nil
+	return nil
 }
 
 func (p *EncryptedClient) DecryptMessage(message, counter, nonce, mac []byte) (plaintext []byte) {

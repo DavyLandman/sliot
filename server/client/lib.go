@@ -2,52 +2,47 @@ package client
 
 import (
 	"bytes"
-	"encoding/binary"
+	"crypto"
 	"fmt"
-	espnow "github.com/DavyLandman/espnow-bridge"
 	"log"
 	"os"
 	"path"
-	"siot-server/config"
-	"siot-server/server"
 	"time"
+
+	espnow "github.com/DavyLandman/espnow-bridge"
 )
 
 type Client struct {
+	Mac         [6]byte
+	PublicKey   []byte
+	WifiChannel int
 	sessionFile string
 	dataKey     []byte
 	encrypted   EncryptedClient
-	config      *config.Client
 	outbox      chan<- espnow.Message
-	dataOutbox  chan<- ReceivedData
-	server      *server.Server
+	dataOutbox  chan<- Message
+	signer      crypto.Signer
 	saveSession chan bool
 }
 
-type ReceivedData struct {
-	ID     int
-	Value  interface{}
-	Client *config.Client
+type Message struct {
+	Received time.Time
+	Mac      [6]byte
+	Message  []byte
 }
 
-func NewClient(dataPath string, dataKey []byte, base *config.Client, outbox chan<- espnow.Message, dataOutbox chan<- ReceivedData, server *server.Server) (*Client, error) {
+func NewClient(dataPath string, dataKey []byte, mac [6]byte, publicKey []byte, wifiChannel int, outbox chan<- espnow.Message, dataOutbox chan<- Message, signer crypto.Signer) (*Client, error) {
 	var result Client
 	result.dataKey = dataKey
-	result.config = base
-	result.server = server
+	copy(result.Mac[:], mac[:])
+	copy(result.PublicKey, publicKey)
+	result.WifiChannel = wifiChannel
+	result.signer = signer
 	result.outbox = outbox
 	result.dataOutbox = dataOutbox
 	result.saveSession = make(chan bool, 10)
 
-	mac, err := base.GetByteMac()
-	if err != nil {
-		return nil, err
-	}
 	result.sessionFile = fileName(dataPath, mac)
-	publicKey, err := base.GetBytePublicKey()
-	if err != nil {
-		return nil, err
-	}
 	result.encrypted.Initialize(mac, publicKey)
 	if info, err := os.Stat(result.sessionFile); err == nil && !info.IsDir() {
 		data, err := os.Open(result.sessionFile)
@@ -67,7 +62,7 @@ func (c *Client) Close() {
 	close(c.saveSession)
 }
 
-func (c *Client) HandleMessage(data []byte) {
+func (c *Client) HandleMessage(when time.Time, data []byte) {
 	if len(data) < 2 {
 		log.Printf("To short of a message received %v\n", data)
 		return
@@ -76,7 +71,7 @@ func (c *Client) HandleMessage(data []byte) {
 	case 1:
 		c.handleKeyExchange(data[1:])
 	case 2:
-		c.handleNormalMessage(data[1:])
+		c.handleNormalMessage(when, data[1:])
 	default:
 		log.Printf("Strange message received %02x\n", data[0])
 	}
@@ -89,8 +84,12 @@ func (c *Client) handleKeyExchange(data []byte) {
 	}
 	theirSignature := data[:64]
 	theirPublicKey := data[64:]
-	replyPublic, replySignature := c.encrypted.KeyExchangeReply(theirPublicKey, theirSignature, c.server)
-	if replyPublic != nil && replySignature != nil {
+	replyPublic := c.encrypted.KeyExchangeReply(theirPublicKey, theirSignature, c.signer.Public().([]byte))
+	if replyPublic != nil {
+		replySignature, err := c.signer.Sign(nil, replyPublic, crypto.Hash(0))
+		if err != nil {
+			log.Fatalf("Did not expect signing to fail: %v", err)
+		}
 		var response bytes.Buffer
 		response.WriteByte(0x01)
 		response.Write(replySignature)
@@ -103,7 +102,7 @@ func (c *Client) handleKeyExchange(data []byte) {
 	}
 }
 
-func (c *Client) handleNormalMessage(data []byte) {
+func (c *Client) handleNormalMessage(when time.Time, data []byte) {
 	reader := bytes.NewBuffer(data)
 	counter := reader.Next(2)
 	msgSize, _ := reader.ReadByte()
@@ -115,36 +114,14 @@ func (c *Client) handleNormalMessage(data []byte) {
 		return
 	}
 	plainMessage := c.encrypted.DecryptMessage(cipherText, counter, nonce, mac)
-
 	if plainMessage != nil {
-		contents := bytes.NewReader(plainMessage)
-		for contents.Len() > 0 {
-			taggedID, _ := contents.ReadByte()
-			tag := int(taggedID & 0x0F)
-			id := int(taggedID >> 4)
-			switch tag {
-			case 1: // int32
-				var value int32
-				binary.Read(contents, binary.LittleEndian, &value)
-				c.dataOutbox <- ReceivedData{
-					ID:     id,
-					Value:  value,
-					Client: c.config,
-				}
-			case 2: // float32
-				var value float32
-				binary.Read(contents, binary.LittleEndian, &value)
-				c.dataOutbox <- ReceivedData{
-					ID:     id,
-					Value:  value,
-					Client: c.config,
-				}
-			default:
-				log.Fatalf("Received message with unknown tag, wrong version of client library?: %02x (full: %v)", tag, plainMessage)
-			}
+		c.dataOutbox <- Message{
+			Received: when,
+			Mac:      c.Mac,
+			Message:  plainMessage,
 		}
-
 	}
+
 }
 
 func (c *Client) GetId() uint64 {
