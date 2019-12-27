@@ -2,10 +2,15 @@ package server
 
 import (
 	"crypto"
+	"encoding/base64"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"siot-server/client"
 	"siot-server/monocypher"
+
+	"golang.org/x/crypto/blake2b"
 
 	espnow "github.com/DavyLandman/espnow-bridge"
 )
@@ -25,15 +30,17 @@ type ClientConfig struct {
 	WifiChannel int
 }
 
-func Start(clients []ClientConfig, dataPath string, dataKey, privateKey, publicKey []byte, bridge *espnow.Bridge) (*Server, error) {
+func Start(clients []ClientConfig, dataPath, privateKeyFile string, bridge *espnow.Bridge) (*Server, error) {
 	var result Server
 	result.bridge = bridge
-	copy(result.PublicKey, publicKey)
-	copy(result.privateKey, privateKey)
+	dataKey, err := result.calculateKeys(privateKeyFile)
+	if err != nil {
+		return nil, err
+	}
 	result.stopped = make(chan bool)
 	result.inbox = make(chan client.Message, 1024)
 
-	err := result.load(clients, dataPath, dataKey)
+	err = result.load(clients, dataPath, dataKey)
 	if err != nil {
 		result.Close()
 		return nil, err
@@ -41,6 +48,45 @@ func Start(clients []ClientConfig, dataPath string, dataKey, privateKey, publicK
 
 	go result.forwardIncoming()
 	return &result, err
+}
+
+func (s *Server) calculateKeys(privateKeyFile string) ([]byte, error) {
+	privateKey, err := getPrivateKey(privateKeyFile)
+	if err != nil {
+		return nil, err
+	}
+	s.privateKey = privateKey
+	s.PublicKey = monocypher.SignPublicKey(privateKey)
+
+	// calculate data key: blake2b-256(blake2b-512(privateKey) + privateKey) (we hash twice to make any kind of bruteforcing a lot more annoying)
+	hasher, err := blake2b.New(client.SessionKeySize, nil)
+	if err != nil {
+		return nil, err
+	}
+	intermediate, err := blake2b.New512(nil)
+	if err != nil {
+		return nil, err
+	}
+	intermediate.Write(s.privateKey)
+	hasher.Write(intermediate.Sum(nil))
+	hasher.Write(s.privateKey)
+	return hasher.Sum(nil), nil
+}
+
+func getPrivateKey(keyFile string) ([]byte, error) {
+	b, err := ioutil.ReadFile(keyFile)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]byte, monocypher.PrivateKeySize)
+	n, err := base64.StdEncoding.Decode(result, b)
+	if err != nil {
+		return nil, err
+	}
+	if n != len(result) {
+		return nil, fmt.Errorf("Failed to decode private key, only got %v bytes", n)
+	}
+	return result, nil
 }
 
 func (s *Server) Close() {

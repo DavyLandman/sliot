@@ -11,6 +11,10 @@ import (
 	"siot-server/monocypher"
 )
 
+const (
+	SessionKeySize = chacha20poly1305.KeySize
+)
+
 type EncryptedClient struct {
 	Mac         [6]byte
 	PublicKey   []byte

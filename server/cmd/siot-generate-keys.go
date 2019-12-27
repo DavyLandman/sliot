@@ -5,52 +5,84 @@ import (
 	"encoding/base64"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"strconv"
 	"strings"
 
-	"golang.org/x/crypto/chacha20poly1305"
-
 	"siot-server/monocypher"
-	"siot-server/config"
 )
 
 func main() {
-	var serverKey bool
-	var longTermPublicKey string
+	var generatePrivateKey, printPublicKey bool
+	var longTermPublicKey, privateKeyFile string
 	var serverMac string
 
-	flag.BoolVar(&serverKey, "generateServer", false, "Generate new server keys instead of a new pair of client keys")
+	flag.BoolVar(&generatePrivateKey, "generatePrivateKey", false, "Generate new long-term server key")
+	flag.BoolVar(&printPublicKey, "printPublicKey", false, "Print public key corresponding to private key of server")
+	flag.StringVar(&privateKeyFile, "privateKey", "", "private key to extract the public key from")
+
 	flag.StringVar(&longTermPublicKey, "serverPublicKey", "", "provide long term public key in base64 format for the server")
 	flag.StringVar(&serverMac, "serverMac", "00:00:00:00:00:00", "mac of the server")
 	flag.Parse()
 
-	if serverKey {
+	if generatePrivateKey {
 		generateServerKeys()
+	} else if printPublicKey {
+		printoutPublicKey(privateKeyFile)
 	} else {
 		if len(longTermPublicKey) == 0 {
-			log.Fatalf("Must supply public key")
+			var err error
+			longTermPublicKey, err = calculatePublicKey(privateKeyFile)
+			if err != nil {
+				log.Fatalf("Must supply public key or the private key file")
+			} else {
+				log.Printf("Calculated public key: %v based on supplied private key\n", longTermPublicKey)
+			}
 		}
 		serverKey, err := base64.StdEncoding.DecodeString(longTermPublicKey)
 		if err != nil {
-			log.Fatal("Cannot decode public key: %v", err)
+			log.Fatalf("Cannot decode public key: %v", err)
 		}
 		generateClientKeys(serverKey, serverMac)
 	}
 }
 
 func generateServerKeys() {
-	fmt.Println("Generating new server keys")
-	dataKey := make([]byte, chacha20poly1305.KeySize)
-	rand.Read(dataKey)
-
 	longTermPrivateKey := make([]byte, monocypher.PrivateKeySize)
 	rand.Read(longTermPrivateKey)
+	fmt.Println(base64.StdEncoding.EncodeToString(longTermPrivateKey))
+}
 
-	longTermPublicKey := monocypher.SignPublicKey(longTermPrivateKey)
+func printoutPublicKey(privateKeyFile string) {
+	key, err := calculatePublicKey(privateKeyFile)
+	if err != nil {
+		log.Fatalf("Failure to calculate the public key based on %v, error: %v", privateKeyFile, err)
+	}
+	keyBytes, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		log.Fatalf("Failure to decode public key %v? error: %v", key, err)
+	}
+	emoji.Println("** Public key")
+	fmt.Printf("* base64: \t%v\n", key)
+	fmt.Printf("* c bytes:\t%v\n", byteArray(keyBytes))
+}
 
-	fmt.Printf("DATA_KEY=\"%v\"\n", base64.StdEncoding.EncodeToString(dataKey))
-	fmt.Printf("LONG_TERM_PRIVATE_KEY=\"%v\"\n", base64.StdEncoding.EncodeToString(longTermPrivateKey))
-	fmt.Printf("LONG_TERM_PUBLIC_KEY=\"%v\"\n", base64.StdEncoding.EncodeToString(longTermPublicKey))
+func calculatePublicKey(privateKeyFile string) (string, error) {
+	b, err := ioutil.ReadFile(privateKeyFile)
+	if err != nil {
+		return "", err
+	}
+	privateKey := make([]byte, monocypher.PrivateKeySize)
+	n, err := base64.StdEncoding.Decode(privateKey, b)
+	if err != nil {
+		return "", err
+	}
+	if n < len(privateKey) {
+		return "", fmt.Errorf("Unexpected amount of bytes decoded: %v", n)
+	}
+	publicKey := monocypher.SignPublicKey(privateKey)
+	return base64.StdEncoding.EncodeToString(publicKey), nil
 }
 
 func generateClientKeys(serverKey []byte, serverMac string) {
@@ -88,9 +120,25 @@ func byteArray(bytes []byte) string {
 }
 
 func macByteArray(mac string) string {
-	asBytes, err := config.ParseMacString(mac)
+	asBytes, err := parseMacString(mac)
 	if err != nil {
 		log.Fatalf("Error converting mac array: %v", err)
 	}
 	return byteArray(asBytes[:])
+}
+
+func parseMacString(mac string) ([6]byte, error) {
+	var asBytes [6]byte
+	chunks := strings.Split(mac, ":")
+	if len(chunks) != 6 {
+		return asBytes, fmt.Errorf("Incorrect mac: %v", mac)
+	}
+	for i := 0; i < 6; i++ {
+		macChunk, err := strconv.ParseUint(chunks[i], 16, 8)
+		if err != nil {
+			return asBytes, fmt.Errorf("Error parsing mac: %v (%v)", mac, err)
+		}
+		asBytes[i] = byte(macChunk)
+	}
+	return asBytes, nil
 }
