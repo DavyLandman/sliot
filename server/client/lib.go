@@ -8,21 +8,19 @@ import (
 	"os"
 	"path"
 	"time"
-
-	espnow "github.com/DavyLandman/espnow-bridge"
 )
 
 type Client struct {
-	Mac         [6]byte
-	PublicKey   []byte
-	WifiChannel int
-	sessionFile string
-	dataKey     []byte
-	encrypted   EncryptedClient
-	outbox      chan<- espnow.Message
-	dataOutbox  chan<- Message
-	signer      crypto.Signer
-	saveSession chan bool
+	Mac               [6]byte
+	PublicKey         []byte
+	sessionFile       string
+	dataKey           []byte
+	encrypted         EncryptedClient
+	outgoingMessages  chan<- Message
+	incomingMessages  chan Message
+	decryptedMessages chan<- Message
+	signer            crypto.Signer
+	saveSession       chan bool
 }
 
 type Message struct {
@@ -31,15 +29,16 @@ type Message struct {
 	Message  []byte
 }
 
-func NewClient(dataPath string, dataKey []byte, mac [6]byte, publicKey []byte, wifiChannel int, outbox chan<- espnow.Message, dataOutbox chan<- Message, signer crypto.Signer) (*Client, error) {
+func NewClient(dataPath string, dataKey []byte, mac [6]byte, publicKey []byte,
+	outgoingMessages chan<- Message, decryptedMessages chan<- Message, signer crypto.Signer) (*Client, error) {
 	var result Client
 	result.dataKey = dataKey
 	copy(result.Mac[:], mac[:])
 	copy(result.PublicKey, publicKey)
-	result.WifiChannel = wifiChannel
 	result.signer = signer
-	result.outbox = outbox
-	result.dataOutbox = dataOutbox
+	result.incomingMessages = make(chan Message, 1024)
+	result.outgoingMessages = outgoingMessages
+	result.decryptedMessages = decryptedMessages
 	result.saveSession = make(chan bool, 10)
 
 	result.sessionFile = fileName(dataPath, mac)
@@ -54,6 +53,7 @@ func NewClient(dataPath string, dataKey []byte, mac [6]byte, publicKey []byte, w
 	}
 
 	go result.periodicSessionBackup()
+	go result.handleMessages()
 
 	return &result, nil
 }
@@ -62,18 +62,27 @@ func (c *Client) Close() {
 	close(c.saveSession)
 }
 
-func (c *Client) HandleMessage(when time.Time, data []byte) {
-	if len(data) < 2 {
-		log.Printf("To short of a message received %v\n", data)
-		return
-	}
-	switch data[0] {
-	case 1:
-		c.handleKeyExchange(data[1:])
-	case 2:
-		c.handleNormalMessage(when, data[1:])
-	default:
-		log.Printf("Strange message received %02x\n", data[0])
+func (c *Client) NewIncomingMessage(msg Message) {
+	c.incomingMessages <- msg
+}
+
+func (c *Client) handleMessages() {
+	for m := range c.incomingMessages {
+		if m.Mac != c.Mac {
+			log.Fatalf("Received message not intended for me: %v", m)
+		}
+		if len(m.Message) < 2 {
+			log.Printf("To short of a message received %v\n", m)
+			return
+		}
+		switch m.Message[0] {
+		case 1:
+			c.handleKeyExchange(m.Message[1:])
+		case 2:
+			c.handleNormalMessage(m.Received, m.Message[1:])
+		default:
+			log.Printf("Strange message received %02x\n", m.Message[0])
+		}
 	}
 }
 
@@ -94,9 +103,9 @@ func (c *Client) handleKeyExchange(data []byte) {
 		response.WriteByte(0x01)
 		response.Write(replySignature)
 		response.Write(replyPublic)
-		c.outbox <- espnow.Message{
-			Mac:  c.encrypted.Mac,
-			Data: response.Bytes(),
+		c.outgoingMessages <- Message{
+			Mac:     c.encrypted.Mac,
+			Message: response.Bytes(),
 		}
 		c.saveSession <- true
 	}
@@ -115,7 +124,7 @@ func (c *Client) handleNormalMessage(when time.Time, data []byte) {
 	}
 	plainMessage := c.encrypted.DecryptMessage(cipherText, counter, nonce, mac)
 	if plainMessage != nil {
-		c.dataOutbox <- Message{
+		c.decryptedMessages <- Message{
 			Received: when,
 			Mac:      c.Mac,
 			Message:  plainMessage,

@@ -11,17 +11,16 @@ import (
 	"siot-server/monocypher"
 
 	"golang.org/x/crypto/blake2b"
-
-	espnow "github.com/DavyLandman/espnow-bridge"
 )
 
 type Server struct {
-	PublicKey  []byte
-	privateKey []byte
-	inbox      chan client.Message
-	stopped    chan bool
-	bridge     *espnow.Bridge
-	clients    map[uint64]*client.Client
+	PublicKey        []byte
+	privateKey       []byte
+	inbox            chan client.Message
+	outbox           chan client.Message
+	incomingMessages <-chan client.Message
+	stopped          chan bool
+	clients          map[uint64]*client.Client
 }
 
 type ClientConfig struct {
@@ -30,17 +29,18 @@ type ClientConfig struct {
 	WifiChannel int
 }
 
-func Start(clients []ClientConfig, dataPath, privateKeyFile string, bridge *espnow.Bridge) (*Server, error) {
+func Start(clients []ClientConfig, dataPath, privateKeyFile string, incomingMessages <-chan client.Message, outgoingMessages chan<- client.Message) (*Server, error) {
 	var result Server
-	result.bridge = bridge
+	result.incomingMessages = incomingMessages
 	dataKey, err := result.calculateKeys(privateKeyFile)
 	if err != nil {
 		return nil, err
 	}
 	result.stopped = make(chan bool)
 	result.inbox = make(chan client.Message, 1024)
+	result.outbox = make(chan client.Message, 1024)
 
-	err = result.load(clients, dataPath, dataKey)
+	err = result.load(clients, dataPath, dataKey, outgoingMessages)
 	if err != nil {
 		result.Close()
 		return nil, err
@@ -90,17 +90,21 @@ func getPrivateKey(keyFile string) ([]byte, error) {
 
 func (s *Server) Close() {
 	close(s.stopped)
-	s.bridge.Close()
 	if s.clients != nil {
 		for _, c := range s.clients {
 			c.Close()
 		}
 	}
 	close(s.inbox)
+	close(s.outbox)
 }
 
 func (s *Server) GetInbox() chan<- client.Message {
 	return s.inbox
+}
+
+func (s *Server) GetOutbox() <-chan client.Message {
+	return s.outbox
 }
 
 func (s *Server) forwardIncoming() {
@@ -110,14 +114,14 @@ func (s *Server) forwardIncoming() {
 			if !open {
 				return
 			}
-		case m, open := <-s.bridge.Inbox:
+		case m, open := <-s.incomingMessages:
 			if !open {
 				close(s.stopped)
 				return
 			}
 			c := s.clients[client.MacToId(m.Mac)]
 			if c != nil {
-				c.HandleMessage(m.Data)
+				c.NewIncomingMessage(m)
 			} else {
 				log.Printf("Dropping message from %v (not in client table)\n", m.Mac)
 			}
@@ -125,11 +129,11 @@ func (s *Server) forwardIncoming() {
 	}
 }
 
-func (s *Server) load(clients []ClientConfig, dataPath string, dataKey []byte) error {
+func (s *Server) load(clients []ClientConfig, dataPath string, dataKey []byte, outgoingMessages chan<- client.Message) error {
 	s.clients = make(map[uint64]*client.Client)
 	for _, c := range clients {
 		id := client.MacToId(c.Mac)
-		newClient, err := client.NewClient(dataPath, dataKey, c.Mac, c.PublicKey, c.WifiChannel, s.bridge.Outbox, s.inbox, s)
+		newClient, err := client.NewClient(dataPath, dataKey, c.Mac, c.PublicKey, outgoingMessages, s.inbox, s)
 		if err != nil {
 			return err
 		}
