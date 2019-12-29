@@ -71,7 +71,7 @@ func LockAEAD(plaintext, nonce, key, ad []byte) (mac, ciphertext []byte) {
 	C.crypto_lock_aead(CMac, CCipher, CKey, CNonce, CAD, CADSize, CPlain, CSize)
 
 	return C.GoBytes(unsafe.Pointer(CMac), C.int(MACSize)), 
-		C.GoBytes(unsafe.Pointer(CCipher), CSize)
+		C.GoBytes(unsafe.Pointer(CCipher), C.int(len(plaintext)))
 
 }
 

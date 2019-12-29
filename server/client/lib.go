@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"crypto"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"os"
@@ -19,6 +20,7 @@ type Client struct {
 	outgoingMessages  chan<- Message
 	incomingMessages  chan Message
 	decryptedMessages chan<- Message
+	messagesToEncrypt chan Message
 	signer            crypto.Signer
 	saveSession       chan bool
 }
@@ -37,6 +39,7 @@ func NewClient(dataPath string, dataKey []byte, mac [6]byte, publicKey []byte,
 	copy(result.PublicKey, publicKey)
 	result.signer = signer
 	result.incomingMessages = make(chan Message, 1024)
+	result.messagesToEncrypt = make(chan Message, 1024)
 	result.outgoingMessages = outgoingMessages
 	result.decryptedMessages = decryptedMessages
 	result.saveSession = make(chan bool, 10)
@@ -66,22 +69,53 @@ func (c *Client) NewIncomingMessage(msg Message) {
 	c.incomingMessages <- msg
 }
 
+func (c *Client) NewOutgoingMessage(msg Message) {
+	c.messagesToEncrypt <- msg
+}
+
 func (c *Client) handleMessages() {
-	for m := range c.incomingMessages {
-		if m.Mac != c.Mac {
-			log.Fatalf("Received message not intended for me: %v", m)
-		}
-		if len(m.Message) < 2 {
-			log.Printf("To short of a message received %v\n", m)
-			return
-		}
-		switch m.Message[0] {
-		case 1:
-			c.handleKeyExchange(m.Message[1:])
-		case 2:
-			c.handleNormalMessage(m.Received, m.Message[1:])
-		default:
-			log.Printf("Strange message received %02x\n", m.Message[0])
+	for {
+		select {
+		case m, active := <-c.incomingMessages:
+			if !active {
+				return
+			}
+			if m.Mac != c.Mac {
+				log.Fatalf("Received message not intended for me: %v", m)
+			}
+			if len(m.Message) < 2 {
+				log.Printf("To short of a message received %v\n", m)
+				return
+			}
+
+			switch m.Message[0] {
+			case 1:
+				c.handleKeyExchange(m.Message[1:])
+			case 2:
+				c.handleNormalMessage(m.Received, m.Message[1:])
+			default:
+				log.Printf("Strange message received %02x\n", m.Message[0])
+			}
+		case m, active := <-c.messagesToEncrypt:
+			if !active {
+				return
+			}
+			if m.Mac != c.Mac {
+				log.Fatalf("Received message not intended for me: %v", m)
+			}
+			newMessage := new(bytes.Buffer)
+			newMessage.WriteByte(0x03)
+			binary.Write(newMessage, binary.LittleEndian, uint16(len(m.Message)))
+
+			ciphertext, counter, nonce, mac := c.encrypted.EncryptMessage(m.Message)
+			newMessage.Write(counter)
+			newMessage.Write(nonce)
+			newMessage.Write(mac)
+			newMessage.Write(ciphertext)
+			c.outgoingMessages <- Message{
+				Mac:     c.Mac,
+				Message: newMessage.Bytes(),
+			}
 		}
 	}
 }
@@ -104,7 +138,7 @@ func (c *Client) handleKeyExchange(data []byte) {
 		response.Write(replySignature)
 		response.Write(replyPublic)
 		c.outgoingMessages <- Message{
-			Mac:     c.encrypted.Mac,
+			Mac:     c.Mac,
 			Message: response.Bytes(),
 		}
 		c.saveSession <- true

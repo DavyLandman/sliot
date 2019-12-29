@@ -7,6 +7,7 @@ import (
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20poly1305"
 	"io"
+	"sync/atomic"
 
 	"github.com/DavyLandman/sliot/server/monocypher"
 )
@@ -16,16 +17,18 @@ const (
 )
 
 type EncryptedClient struct {
-	Mac         [6]byte
-	PublicKey   []byte
-	sessionKey  []byte
-	lastCounter uint32
+	Mac            [6]byte
+	PublicKey      []byte
+	sessionKey     []byte
+	receiveCounter uint32
+	sendCounter    uint32
 }
 
 func (p *EncryptedClient) Initialize(mac [6]byte, publicKey []byte) {
 	copy(p.Mac[:], mac[:])
 	copy(p.PublicKey, publicKey)
-	p.lastCounter = 0
+	p.receiveCounter = 0
+	p.sendCounter = 0
 }
 
 func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature, serverPublic []byte) (publicKey []byte) {
@@ -41,6 +44,8 @@ func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature, se
 		hasher.Write(p.PublicKey)
 
 		p.sessionKey = hasher.Sum(nil)
+		p.receiveCounter = 0
+		p.sendCounter = 0
 
 		hasher.Reset()
 
@@ -55,24 +60,34 @@ func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature, se
 
 func (p *EncryptedClient) DecryptMessage(message, counter, nonce, mac []byte) (plaintext []byte) {
 	counterFull := uint32(counter[0]) | uint32(counter[1])<<8
-	if counterFull > p.lastCounter {
+	if counterFull > p.receiveCounter {
 		result := monocypher.UnlockAEAD(message, nonce, p.sessionKey, mac, counter)
 		if result != nil {
-			p.lastCounter = counterFull
+			p.receiveCounter = counterFull
 			return result
 		}
 	}
 	return nil
 }
 
+func (p *EncryptedClient) EncryptMessage(message []byte) (cipherText, counter, nonce, mac []byte) {
+	nextCounter := atomic.AddUint32(&p.sendCounter, 1)
+	counter = []byte{byte(nextCounter & 0xFF), byte((nextCounter >> 8) & 0xFF)}
+	nonce = make([]byte, monocypher.NonceSize)
+	rand.Read(nonce)
+	mac, cipherText = monocypher.LockAEAD(cipherText, nonce, p.sessionKey, counter)
+	return cipherText, counter, nonce, mac
+}
+
 type privatePeerData struct {
-	SessionKey  []byte
-	LastCounter uint32
+	SessionKey     []byte
+	ReceiveCounter uint32
+	SendCounter    uint32
 }
 
 func (p EncryptedClient) SaveSession(target io.Writer, dataKey []byte) error {
 	var rawMessage bytes.Buffer
-	err := gob.NewEncoder(&rawMessage).Encode(privatePeerData{p.sessionKey, p.lastCounter})
+	err := gob.NewEncoder(&rawMessage).Encode(privatePeerData{p.sessionKey, p.receiveCounter, p.sendCounter})
 	if err != nil {
 		return err
 	}
@@ -120,6 +135,7 @@ func (p *EncryptedClient) RestoreSession(source io.Reader, dataKey []byte) error
 		return err
 	}
 	p.sessionKey = serializedData.SessionKey
-	p.lastCounter = serializedData.LastCounter
+	p.receiveCounter = serializedData.ReceiveCounter
+	p.sendCounter = serializedData.SendCounter
 	return nil
 }

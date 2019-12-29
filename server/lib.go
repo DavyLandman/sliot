@@ -4,11 +4,11 @@ import (
 	"crypto"
 	"encoding/base64"
 	"fmt"
+	"github.com/DavyLandman/sliot/server/client"
+	"github.com/DavyLandman/sliot/server/monocypher"
 	"io"
 	"io/ioutil"
 	"log"
-	"github.com/DavyLandman/sliot/server/client"
-	"github.com/DavyLandman/sliot/server/monocypher"
 
 	"golang.org/x/crypto/blake2b"
 )
@@ -114,6 +114,17 @@ func (s *Server) forwardIncoming() {
 			if !open {
 				return
 			}
+		case m, open := <-s.outbox:
+			if !open {
+				return
+			}
+			c := s.clients[client.MacToId(m.Mac)]
+			if c != nil {
+				c.NewOutgoingMessage(m)
+			} else {
+				log.Printf("Dropping message from %v (not in client table)\n", m.Mac)
+			}
+
 		case m, open := <-s.incomingMessages:
 			if !open {
 				close(s.stopped)
