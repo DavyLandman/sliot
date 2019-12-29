@@ -58,18 +58,17 @@ func (s *Server) calculateKeys(privateKeyFile string) ([]byte, error) {
 	s.privateKey = privateKey
 	s.PublicKey = monocypher.SignPublicKey(privateKey)
 
-	// calculate data key: blake2b-256(blake2b-512(privateKey) + privateKey) (we hash twice to make any kind of bruteforcing a lot more annoying)
+	// calculate data key: blake2b-256(privateKey + sign value of a static string) (we hash twice to make any kind of bruteforcing a lot more annoying)
 	hasher, err := blake2b.New(client.SessionKeySize, nil)
 	if err != nil {
 		return nil, err
 	}
-	intermediate, err := blake2b.New512(nil)
+	hasher.Write(s.privateKey)
+	signature, err := s.Sign(nil, []byte("some bytes to sign to make the hass less predictable"), crypto.Hash(0))
 	if err != nil {
 		return nil, err
 	}
-	intermediate.Write(s.privateKey)
-	hasher.Write(intermediate.Sum(nil))
-	hasher.Write(s.privateKey)
+	hasher.Write(signature)
 	return hasher.Sum(nil), nil
 }
 
