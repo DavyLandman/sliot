@@ -47,6 +47,34 @@ func UnlockAEAD(ciphertext, nonce, key, mac, ad []byte) (plaintext []byte) {
 	return nil 
 }
 
+func LockAEAD(plaintext, nonce, key, ad []byte) (mac, ciphertext []byte) {
+	CSize := (C.size_t)(len(plaintext))
+	CPlain := (*C.uint8_t)(unsafe.Pointer(C.CBytes(plaintext)))
+	defer clearAndFree(unsafe.Pointer(CPlain), len(plaintext))
+
+	CADSize := (C.size_t)(len(ad))
+	CAD := (*C.uint8_t)(unsafe.Pointer(C.CBytes(ad)))
+	defer C.free(unsafe.Pointer(CAD))
+
+	CKey := (*C.uint8_t)(unsafe.Pointer(C.CBytes([]uint8(key[:AEADKeySize]))))
+	defer clearAndFree(unsafe.Pointer(CKey), AEADKeySize)
+
+	CNonce := (*C.uint8_t)(unsafe.Pointer(C.CBytes([]uint8(nonce[:NonceSize]))))
+	defer C.free(unsafe.Pointer(CNonce))
+
+	CCipher := (*C.uint8_t)(C.CBytes(make([]uint8, len(plaintext))))
+	defer C.free(unsafe.Pointer(CCipher))
+
+	CMac := (*C.uint8_t)(C.CBytes(make([]uint8, MACSize)))
+	defer C.free(unsafe.Pointer(CMac))
+
+	C.crypto_lock_aead(CMac, CCipher, CKey, CNonce, CAD, CADSize, CPlain, CSize)
+
+	return C.GoBytes(unsafe.Pointer(CMac), C.int(MACSize)), 
+		C.GoBytes(unsafe.Pointer(CCipher), CSize)
+
+}
+
 func KeyExchangePublicKey(secretKey []byte) (publicKey []byte) {
 	CKey := (*C.uint8_t)(unsafe.Pointer(C.CBytes([]uint8(secretKey[:PrivateKeySize]))))
 	defer clearAndFree(unsafe.Pointer(CKey), PrivateKeySize)
