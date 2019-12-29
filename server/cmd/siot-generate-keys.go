@@ -63,7 +63,7 @@ func printoutPublicKey(privateKeyFile string) {
 	if err != nil {
 		log.Fatalf("Failure to decode public key %v? error: %v", key, err)
 	}
-	emoji.Println("** Public key")
+	fmt.Println("** Public key")
 	fmt.Printf("* base64: \t%v\n", key)
 	fmt.Printf("* c bytes:\t%v\n", byteArray(keyBytes))
 }
