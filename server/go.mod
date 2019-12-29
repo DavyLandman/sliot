@@ -1,4 +1,4 @@
-module siot-server
+module github.com/DavyLandman/sliot/server
 
 go 1.13
 

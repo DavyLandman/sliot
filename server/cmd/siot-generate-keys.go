@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"siot-server/monocypher"
+	"github.com/DavyLandman/sliot/server/monocypher"
 )
 
 func main() {

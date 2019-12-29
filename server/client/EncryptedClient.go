@@ -8,7 +8,7 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 	"io"
 
-	"siot-server/monocypher"
+	"github.com/DavyLandman/sliot/server/monocypher"
 )
 
 const (

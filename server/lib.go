@@ -7,8 +7,8 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"siot-server/client"
-	"siot-server/monocypher"
+	"github.com/DavyLandman/sliot/server/client"
+	"github.com/DavyLandman/sliot/server/monocypher"
 
 	"golang.org/x/crypto/blake2b"
 )
