@@ -147,8 +147,8 @@ func (c *Client) handleKeyExchange(data []byte) {
 
 func (c *Client) handleNormalMessage(when time.Time, data []byte) {
 	reader := bytes.NewBuffer(data)
-	counter := reader.Next(2)
 	msgSize, _ := reader.ReadByte()
+	counter := reader.Next(2)
 	nonce := reader.Next(24)
 	mac := reader.Next(16)
 	cipherText := reader.Next(int(uint8(msgSize)))

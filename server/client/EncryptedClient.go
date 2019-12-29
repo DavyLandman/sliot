@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/gob"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -72,7 +73,9 @@ func (p *EncryptedClient) DecryptMessage(message, counter, nonce, mac []byte) (p
 
 func (p *EncryptedClient) EncryptMessage(message []byte) (cipherText, counter, nonce, mac []byte) {
 	nextCounter := atomic.AddUint32(&p.sendCounter, 1)
-	counter = []byte{byte(nextCounter & 0xFF), byte((nextCounter >> 8) & 0xFF)}
+	counterBytes := new(bytes.Buffer)
+	binary.Write(counterBytes, binary.LittleEndian, uint16(nextCounter))
+	counter = counterBytes.Bytes()
 	nonce = make([]byte, monocypher.NonceSize)
 	rand.Read(nonce)
 	mac, cipherText = monocypher.LockAEAD(cipherText, nonce, p.sessionKey, counter)
