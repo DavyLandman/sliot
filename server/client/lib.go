@@ -104,7 +104,7 @@ func (c *Client) handleMessages() {
 				log.Fatalf("Received message not intended for me: %v", m)
 			}
 			newMessage := new(bytes.Buffer)
-			newMessage.WriteByte(0x03)
+			newMessage.WriteByte(0x02)
 			binary.Write(newMessage, binary.LittleEndian, uint16(len(m.Message)))
 
 			ciphertext, counter, nonce, mac := c.encrypted.EncryptMessage(m.Message)
