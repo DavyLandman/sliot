@@ -147,7 +147,8 @@ func (c *Client) handleKeyExchange(data []byte) {
 
 func (c *Client) handleNormalMessage(when time.Time, data []byte) {
 	reader := bytes.NewBuffer(data)
-	msgSize, _ := reader.ReadByte()
+	var msgSize uint16
+	binary.Read(reader, binary.LittleEndian, &msgSize)
 	counter := reader.Next(2)
 	nonce := reader.Next(24)
 	mac := reader.Next(16)
