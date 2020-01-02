@@ -4,11 +4,11 @@ import (
 	"crypto"
 	"encoding/base64"
 	"fmt"
+	"io"
+	"log"
+
 	"github.com/DavyLandman/sliot/server/client"
 	"github.com/DavyLandman/sliot/server/monocypher"
-	"io"
-	"io/ioutil"
-	"log"
 
 	"golang.org/x/crypto/blake2b"
 )
@@ -29,10 +29,10 @@ type ClientConfig struct {
 	WifiChannel int
 }
 
-func Start(clients []ClientConfig, dataPath, privateKeyFile string, incomingMessages <-chan client.Message, outgoingMessages chan<- client.Message) (*Server, error) {
+func Start(clients []ClientConfig, dataPath, privateKey string, incomingMessages <-chan client.Message, outgoingMessages chan<- client.Message) (*Server, error) {
 	var result Server
 	result.incomingMessages = incomingMessages
-	dataKey, err := result.calculateKeys(privateKeyFile)
+	dataKey, err := result.calculateKeys(privateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +50,8 @@ func Start(clients []ClientConfig, dataPath, privateKeyFile string, incomingMess
 	return &result, err
 }
 
-func (s *Server) calculateKeys(privateKeyFile string) ([]byte, error) {
-	privateKey, err := getPrivateKey(privateKeyFile)
+func (s *Server) calculateKeys(encodedPrivateKey string) ([]byte, error) {
+	privateKey, err := getPrivateKey(encodedPrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -72,18 +72,13 @@ func (s *Server) calculateKeys(privateKeyFile string) ([]byte, error) {
 	return hasher.Sum(nil), nil
 }
 
-func getPrivateKey(keyFile string) ([]byte, error) {
-	b, err := ioutil.ReadFile(keyFile)
+func getPrivateKey(encodedString string) ([]byte, error) {
+	result, err := base64.StdEncoding.DecodeString(encodedString)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]byte, monocypher.PrivateKeySize)
-	n, err := base64.StdEncoding.Decode(result, b)
-	if err != nil {
-		return nil, err
-	}
-	if n != len(result) {
-		return nil, fmt.Errorf("Failed to decode private key, only got %v bytes", n)
+	if len(result) != monocypher.PrivateKeySize {
+		return nil, fmt.Errorf("Failed to decode private key, only got %v bytes", len(result))
 	}
 	return result, nil
 }
