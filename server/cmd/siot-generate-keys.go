@@ -59,10 +59,10 @@ func printoutPublicKey(privateKeyFile string) {
 	if err != nil {
 		log.Fatalf("Failure to calculate the public key based on %v, error: %v", privateKeyFile, err)
 	}
-	publicKey := longterm.CalculateLongTermPublicKey(privateKey)
+	publicKey := longterm.CalculatePublic(privateKey)
 	fmt.Println("** Public key")
-	fmt.Printf("* base64: \t%v\n", key)
-	fmt.Printf("* c bytes:\t%v\n", byteArray(keyBytes))
+	fmt.Printf("* base64: \t%v\n", base64.StdEncoding.EncodeToString(publicKey))
+	fmt.Printf("* c bytes:\t%v\n", byteArray(publicKey))
 }
 
 func calculatePublicKey(privateKeyFile string) (string, error) {
