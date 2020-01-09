@@ -44,7 +44,7 @@ static void memcpy_portable(void* target, const void *source, size_t size) {
 }
 
 
-size_t sliot_handshake_init(const struct sliot_config *cfg, void *message_buffer, struct sliot_handshake *handshake, uint8_t random_bytes[32]) {
+size_t sliot_handshake_init(const sliot_config *cfg, void *message_buffer, sliot_handshake *handshake, uint8_t random_bytes[32]) {
     if (cfg == NULL || handshake == NULL || random_bytes == NULL) {
         return 0;
     }
@@ -64,7 +64,7 @@ size_t sliot_handshake_init(const struct sliot_config *cfg, void *message_buffer
     return sizeof(struct signed_key_message);
 }
 
-bool sliot_handshake_finish(const struct sliot_config *cfg, const struct sliot_handshake *handshake, struct sliot_session *session, const void* received_message, size_t message_size) {
+bool sliot_handshake_finish(const sliot_config *cfg, const sliot_handshake *handshake, sliot_session *session, const void* received_message, size_t message_size) {
     if (received_message == NULL || session == NULL || handshake == NULL) {
         return false;
     }
@@ -110,7 +110,7 @@ static uint16_t read_uint16(uint8_t source[2]) {
 }
 
 
-size_t sliot_encrypt(struct sliot_session *session, const void *plaintext, uint16_t length, void* ciphertext, const uint8_t random_bytes[24]) {
+size_t sliot_encrypt(sliot_session *session, const void *plaintext, uint16_t length, void* ciphertext, const uint8_t random_bytes[24]) {
     if (session == NULL || plaintext == NULL | ciphertext == NULL || random_bytes == NULL) {
         return 0;
     }
@@ -125,7 +125,7 @@ size_t sliot_encrypt(struct sliot_session *session, const void *plaintext, uint1
     return length + sizeof(struct message_header);
 }
 
-uint16_t sliot_decrypt(struct sliot_session *session, const void *ciphertext, size_t length, void *plaintext) {
+uint16_t sliot_decrypt(sliot_session *session, const void *ciphertext, size_t length, void *plaintext) {
     if (session == NULL || plaintext == NULL | ciphertext == NULL) {
         return 0;
     }
