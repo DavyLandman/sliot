@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/DavyLandman/sliot/server/keys/longterm"
 	"github.com/DavyLandman/sliot/server/monocypher"
 )
 
@@ -49,20 +50,16 @@ func main() {
 }
 
 func generateServerKeys() {
-	longTermPrivateKey := make([]byte, monocypher.PrivateKeySize)
-	rand.Read(longTermPrivateKey)
+	longTermPrivateKey, _ := longterm.GenerateKeyPair()
 	fmt.Println(base64.StdEncoding.EncodeToString(longTermPrivateKey))
 }
 
 func printoutPublicKey(privateKeyFile string) {
-	key, err := calculatePublicKey(privateKeyFile)
+	privateKey, err := longterm.ReadPrivateKey(privateKeyFile)
 	if err != nil {
 		log.Fatalf("Failure to calculate the public key based on %v, error: %v", privateKeyFile, err)
 	}
-	keyBytes, err := base64.StdEncoding.DecodeString(key)
-	if err != nil {
-		log.Fatalf("Failure to decode public key %v? error: %v", key, err)
-	}
+	publicKey := longterm.CalculateLongTermPublicKey(privateKey)
 	fmt.Println("** Public key")
 	fmt.Printf("* base64: \t%v\n", key)
 	fmt.Printf("* c bytes:\t%v\n", byteArray(keyBytes))
