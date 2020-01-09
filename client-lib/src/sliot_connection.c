@@ -1,5 +1,5 @@
 #include "sliot_connection.h"
-#include <monocypher.h>
+#include "monocypher.h"
 
 #if defined(ESP8266)
 extern void system_soft_wdt_feed(void);
