@@ -24,8 +24,8 @@ type Server struct {
 }
 
 type ClientConfig struct {
-	Mac         [6]byte
-	PublicKey   []byte
+	Mac       [6]byte
+	PublicKey []byte
 }
 
 func Start(clients []ClientConfig, dataPath, privateKey string, incomingMessages <-chan client.Message, outgoingMessages chan<- client.Message) (*Server, error) {

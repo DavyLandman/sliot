@@ -142,6 +142,8 @@ func (c *Client) handleKeyExchange(data []byte) {
 			Message: response.Bytes(),
 		}
 		c.saveSession <- true
+	} else {
+		log.Printf("Invalid key exchange init")
 	}
 }
 
