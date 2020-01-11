@@ -39,7 +39,7 @@ size_t sliot_handshake_init(const sliot_config *cfg, void *message_buffer, sliot
     Handle handshake repsonse, either sets up a session in the session structure, or returns false if it failed for some kind of reason
 
 */
-bool sliot_handshake_finish(const sliot_config *cfg, const sliot_handshake *handshake, sliot_session *session, const void* received_message, size_t message_size);
+bool sliot_handshake_finish(const sliot_config *cfg, sliot_handshake *handshake, sliot_session *session, const void* received_message, size_t message_size);
 
 
 #define SLIOT_OVERHEAD (1 + 2 + 2 + 24 + 16)

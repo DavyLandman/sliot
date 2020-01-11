@@ -64,11 +64,11 @@ size_t sliot_handshake_init(const sliot_config *cfg, void *message_buffer, sliot
     return sizeof(struct signed_key_message);
 }
 
-bool sliot_handshake_finish(const sliot_config *cfg, const sliot_handshake *handshake, sliot_session *session, const void* received_message, size_t message_size) {
+bool sliot_handshake_finish(const sliot_config *cfg, sliot_handshake *handshake, sliot_session *session, const void* received_message, size_t message_size) {
     if (received_message == NULL || session == NULL || handshake == NULL) {
         return false;
     }
-    struct signed_key_message *msg = received_message;
+    const struct signed_key_message *msg = received_message;
     if (message_size != sizeof(struct signed_key_message) || msg->kind != DH_EXCHANGE) {
         return false;
     }
@@ -105,7 +105,7 @@ static void write_uint16(uint8_t target[2], uint16_t value) {
     target[1] = (uint8_t)((value >> 8) & 0xFF);
 }
 
-static uint16_t read_uint16(uint8_t source[2]) {
+static uint16_t read_uint16(const uint8_t source[2]) {
     return ((uint16_t)source[0]) | ((uint16_t)source[1]) << 8;
 }
 
