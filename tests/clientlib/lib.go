@@ -9,8 +9,8 @@ package clientlib
 // #include "monocypher.c"
 // // workaround so that we can import monocypher twice
 // #cgo LDFLAGS: -Wl,--allow-multiple-definition
-
 import "C"
+
 import (
 	"unsafe"
 	"fmt"
