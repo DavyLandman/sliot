@@ -19,10 +19,6 @@ enum MessageKind {
     MESSAGE = 0x02
 };
 
-
-static uint8_t dh_private[32] CRYPTO_ALIGNMENT;
-static const struct siot_config *current_config;
-
 static void memcpy_portable(void* target, const void *source, size_t size) {
     const uint8_t* s = source;
     uint8_t* t = target;
@@ -44,16 +40,19 @@ void print_hex_memory(const void *mem, size_t len) {
 }
 #endif
 
+
+#define __SLIOT_SIGNATURE_SIZE (64)
 /*
 The following message is send during hand shakes
 struct PACKED signed_key_message {
     uint8_t kind; == DH_EXCHANGE
-    uint8_t public_key[32];
-    uint8_t signature[64];
+    uint8_t public_key[SLIOT_KEY_SIZE];
+    uint8_t signature[__SLIOT_SIGNATURE_SIZE];
 };
 */
 
-size_t sliot_handshake_init(const sliot_config *cfg, uint8_t message_buffer[SLIOT_HANDSHAKE_SIZE], sliot_handshake *handshake, uint8_t random_bytes[32]) {
+
+size_t sliot_handshake_init(const sliot_config *cfg, uint8_t message_buffer[SLIOT_HANDSHAKE_SIZE], sliot_handshake *handshake, uint8_t random_bytes[SLIOT_KEY_SIZE]) {
     if (cfg == NULL || handshake == NULL || random_bytes == NULL) {
         return 0;
     }
@@ -62,14 +61,14 @@ size_t sliot_handshake_init(const sliot_config *cfg, uint8_t message_buffer[SLIO
 
     crypto_feed_watchdog();
     memcpy_portable(handshake->private_key, random_bytes, sizeof(handshake->private_key));
-    crypto_wipe(random_bytes, 32);
+    crypto_wipe(random_bytes, SLIOT_KEY_SIZE);
     crypto_key_exchange_public_key(message_buffer, handshake->private_key);
 
     crypto_feed_watchdog();
-    crypto_sign(message_buffer + 32, cfg->long_term_secret, cfg->long_term_public, message_buffer, 32);
+    crypto_sign(message_buffer + SLIOT_KEY_SIZE, cfg->long_term_secret, cfg->long_term_public, message_buffer, SLIOT_KEY_SIZE);
     crypto_feed_watchdog();
 
-    return 1 + 32 + 64;
+    return SLIOT_HANDSHAKE_SIZE;
 }
 
 bool sliot_handshake_finish(const sliot_config *cfg, sliot_handshake *handshake, sliot_session *session, const uint8_t* received_message, size_t message_size) {
@@ -81,7 +80,7 @@ bool sliot_handshake_finish(const sliot_config *cfg, sliot_handshake *handshake,
         return false;
     }
 
-    if (crypto_check(received_message + 32, cfg->server_long_term_public, received_message, 32) == 0) {
+    if (crypto_check(received_message + SLIOT_KEY_SIZE, cfg->server_long_term_public, received_message, SLIOT_KEY_SIZE) == 0) {
         // valid signed DH exchange
 
         crypto_feed_watchdog();
@@ -117,31 +116,34 @@ static uint16_t read_uint16(const uint8_t source[2]) {
     return ((uint16_t)source[0]) | ((uint16_t)source[1]) << 8;
 }
 
+
+#define __SLIOT_MAC_SIZE (16)
+#define __SLIOT_UINT16_SIZE (2)
 /*
 Following header comes before a message
 struct PACKED message_header {
     uint8_t kind; == MESSAGE
-    uint8_t msg_size[2];
-    uint8_t counter[2];
-    uint8_t nonce[24];
-    uint8_t mac[16];
+    uint8_t msg_size[__SLIOT_UINT16_SIZE];
+    uint8_t counter[__SLIOT_UINT16_SIZE];
+    uint8_t nonce[SLIOT_NONCE_SIZE];
+    uint8_t mac[__SLIOT_MAC_SIZE];
 };
 */
 
-size_t sliot_encrypt(sliot_session *session, const uint8_t *plaintext, uint16_t length, uint8_t* ciphertext, const uint8_t random_bytes[24]) {
+size_t sliot_encrypt(sliot_session *session, const uint8_t *plaintext, uint16_t length, uint8_t* ciphertext, const uint8_t random_bytes[SLIOT_NONCE_SIZE]) {
     if (session == NULL || plaintext == NULL | ciphertext == NULL || random_bytes == NULL) {
         return 0;
     }
     *ciphertext++ = MESSAGE;
     write_uint16(ciphertext, length);
-    ciphertext += 2;
+    ciphertext += __SLIOT_UINT16_SIZE;
     uint8_t *ad = ciphertext;
     write_uint16(ciphertext, ++(session->send_counter));
-    ciphertext += 2;
-    memcpy_portable(ciphertext, random_bytes, 24);
-    ciphertext += 24;
+    ciphertext += __SLIOT_UINT16_SIZE;
+    memcpy_portable(ciphertext, random_bytes, SLIOT_NONCE_SIZE);
+    ciphertext += SLIOT_NONCE_SIZE;
 
-    crypto_lock_aead(ciphertext, ciphertext + 16, session->shared_key, random_bytes, ad, 2, plaintext, length);
+    crypto_lock_aead(ciphertext, ciphertext + __SLIOT_MAC_SIZE, session->shared_key, random_bytes, ad, __SLIOT_UINT16_SIZE, plaintext, length);
 
     return length + SLIOT_OVERHEAD;
 }
@@ -158,17 +160,17 @@ uint16_t sliot_decrypt(sliot_session *session, const uint8_t *ciphertext, size_t
         // size field is to big compared to received bytes
         return 0;
     }
-    ciphertext += 2;
+    ciphertext += __SLIOT_UINT16_SIZE;
     const uint8_t *ad = ciphertext;
     uint16_t counter = read_uint16(ciphertext);
     if (counter <= session->receive_counter) {
         return 0;
     }
-    ciphertext += 2;
+    ciphertext += __SLIOT_UINT16_SIZE;
     const uint8_t *nonce = ciphertext;
-    const uint8_t *mac = ciphertext + 24;
-    ciphertext += 24 + 16;
-    if (crypto_unlock_aead(plaintext, session->shared_key, nonce, mac, ad, 2, ciphertext, size) == 0) {
+    const uint8_t *mac = ciphertext + SLIOT_NONCE_SIZE;
+    ciphertext += SLIOT_NONCE_SIZE + __SLIOT_MAC_SIZE;
+    if (crypto_unlock_aead(plaintext, session->shared_key, nonce, mac, ad, __SLIOT_UINT16_SIZE, ciphertext, size) == 0) {
         session->receive_counter = counter;
         return size;
     }

@@ -6,14 +6,16 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define SLIOT_KEY_SIZE (32)
+
 typedef struct sliot_config{
-    uint8_t long_term_secret[32];
-    uint8_t long_term_public[32];
-    uint8_t server_long_term_public[32];
+    uint8_t long_term_secret[SLIOT_KEY_SIZE];
+    uint8_t long_term_public[SLIOT_KEY_SIZE];
+    uint8_t server_long_term_public[SLIOT_KEY_SIZE];
 } sliot_config;
 
 typedef struct sliot_handshake {
-    uint8_t private_key[32];
+    uint8_t private_key[SLIOT_KEY_SIZE];
 } sliot_handshake;
 
 typedef struct sliot_session {
@@ -23,8 +25,8 @@ typedef struct sliot_session {
     uint16_t receive_counter;
 } sliot_session;
 
-#define SLIOT_HANDSHAKE_SIZE (1 + 64 + 32)
 
+#define SLIOT_HANDSHAKE_SIZE (1 + 64 + SLIOT_KEY_SIZE)
 /*
     Start a handshake with the server to get a new shared key that can be used for sending messages, 
 
@@ -32,7 +34,7 @@ typedef struct sliot_session {
 
     Reply with the bytes message_buffer.
 */
-size_t sliot_handshake_init(const sliot_config *cfg, uint8_t message_buffer[SLIOT_HANDSHAKE_SIZE], sliot_handshake *handshake, uint8_t random_bytes[32]);
+size_t sliot_handshake_init(const sliot_config *cfg, uint8_t message_buffer[SLIOT_HANDSHAKE_SIZE], sliot_handshake *handshake, uint8_t random_bytes[SLIOT_KEY_SIZE]);
 
 
 /*
@@ -42,13 +44,14 @@ size_t sliot_handshake_init(const sliot_config *cfg, uint8_t message_buffer[SLIO
 bool sliot_handshake_finish(const sliot_config *cfg, sliot_handshake *handshake, sliot_session *session, const uint8_t* received_message, size_t message_size);
 
 
-#define SLIOT_OVERHEAD (1 + 2 + 2 + 24 + 16)
+#define SLIOT_NONCE_SIZE (24)
+#define SLIOT_OVERHEAD (1 + 2 + 2 + SLIOT_NONCE_SIZE + 16)
 /*
     encode a new message in this session, returns the written bytes to the ciphertext pointer, not that ciphertext should have room for length + SLIOT_OVERHEAD
 
     returns 0 if the session is incorrect
 */
-size_t sliot_encrypt(sliot_session *session, const uint8_t *plaintext, uint16_t length, uint8_t* ciphertext, const uint8_t random_bytes[24]);
+size_t sliot_encrypt(sliot_session *session, const uint8_t *plaintext, uint16_t length, uint8_t* ciphertext, const uint8_t random_bytes[SLIOT_NONCE_SIZE]);
 
 /*
     decrypt an incoming message into the plaintext buffer, plain text should hold at least (length - SLIOT_OVERHEAD) room
