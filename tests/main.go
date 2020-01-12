@@ -3,6 +3,7 @@ package main
 import (
 	"io/ioutil"
 	"log"
+	"time"
 
 	"github.com/DavyLandman/sliot/server"
 	"github.com/DavyLandman/sliot/server/client"
@@ -35,7 +36,7 @@ func main() {
 	handshake, msg := fakeClient.HandshakeInit()
 	log.Printf("Handshake started from client, msg: %v", msg)
 	incoming <- client.Message{Mac: clientMac, Message: msg}
-	reply := <-outgoing
+	reply := readOrFail(outgoing, "handshake server reply")
 	log.Printf("Reply from server: %v", reply)
 	session := handshake.Finish(reply.Message)
 	if session == nil {
@@ -50,7 +51,16 @@ func main() {
 		log.Printf("Prepared encrypted message: %v", msg)
 	}
 	incoming <- client.Message{Mac: clientMac, Message: msg}
-	recvMessage := <-fakeServer.GetInbox()
+	recvMessage := readOrFail(fakeServer.GetInbox(), "decrypted message in Inbox")
 	log.Printf("Received encrypted message: %v", recvMessage)
+}
 
+func readOrFail(source <-chan client.Message, failMessage string) *client.Message {
+	select {
+	case result := <-source:
+		return &result
+	case <-time.After(5 * time.Second):
+		log.Fatal("Error reading: " + failMessage)
+		return nil
+	}
 }
