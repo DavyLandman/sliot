@@ -93,11 +93,11 @@ func (s *Server) Close() {
 	close(s.outbox)
 }
 
-func (s *Server) GetInbox() chan<- client.Message {
+func (s *Server) GetInbox() <-chan client.Message {
 	return s.inbox
 }
 
-func (s *Server) GetOutbox() <-chan client.Message {
+func (s *Server) GetOutbox() chan<- client.Message {
 	return s.outbox
 }
 

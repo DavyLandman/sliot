@@ -1,5 +1,8 @@
 #include "sliot_connection.h"
 #include "monocypher.h"
+#ifdef DEBUG
+#include <stdio.h>
+#endif
 
 #if defined(ESP8266)
 extern void system_soft_wdt_feed(void);
@@ -43,6 +46,17 @@ static void memcpy_portable(void* target, const void *source, size_t size) {
     }
 }
 
+#ifdef DEBUG
+void print_hex_memory(const void *mem, size_t len) {
+  const unsigned char *p = mem;
+  for (size_t i=0;i<len;i++) {
+    if ((i%16==0) && i != 0)
+      printf("\n");
+    printf("0x%02x ", p[i]);
+  }
+  printf("\n");
+}
+#endif
 
 size_t sliot_handshake_init(const sliot_config *cfg, void *message_buffer, sliot_handshake *handshake, uint8_t random_bytes[32]) {
     if (cfg == NULL || handshake == NULL || random_bytes == NULL) {
@@ -120,7 +134,7 @@ size_t sliot_encrypt(sliot_session *session, const void *plaintext, uint16_t len
     write_uint16(header->counter, ++(session->send_counter));
     memcpy_portable(header->nonce, random_bytes, sizeof(header->nonce));
 
-    crypto_lock_aead(header->mac, ((uint8_t*)plaintext) + sizeof(struct message_header), session->shared_key, header->nonce, (const void *) &header->counter, sizeof(header->counter), plaintext, length);
+    crypto_lock_aead(header->mac, ((uint8_t*)ciphertext) + sizeof(struct message_header), session->shared_key, header->nonce, (const void *) &header->counter, sizeof(header->counter), plaintext, length);
 
     return length + sizeof(struct message_header);
 }

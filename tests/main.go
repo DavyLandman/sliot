@@ -40,13 +40,17 @@ func main() {
 	session := handshake.Finish(reply.Message)
 	if session == nil {
 		log.Fatalf("Error in handshake handling")
+	} else {
+		log.Printf("Session started: %v", session)
 	}
 	msg = session.Encrypt(clientMac[:])
 	if msg == nil {
 		log.Fatalf("Error in encrypting message")
+	} else {
+		log.Printf("Prepared encrypted message: %v", msg)
 	}
 	incoming <- client.Message{Mac: clientMac, Message: msg}
-	recvMessage := <-fakeServer.GetOutbox()
+	recvMessage := <-fakeServer.GetInbox()
 	log.Printf("Received encrypted message: %v", recvMessage)
 
 }

@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
 	"path"
 	"time"
+
+	"github.com/DavyLandman/sliot/server/monocypher"
 )
 
 type Client struct {
@@ -33,10 +36,16 @@ type Message struct {
 
 func NewClient(dataPath string, dataKey []byte, mac [6]byte, publicKey []byte,
 	outgoingMessages chan<- Message, decryptedMessages chan<- Message, signer crypto.Signer) (*Client, error) {
+	if len(dataKey) != SessionKeySize {
+		return nil, fmt.Errorf("Data key of invalid size: %v", len(dataKey))
+	}
+	if len(publicKey) != monocypher.PublicKeySize {
+		return nil, fmt.Errorf("Client public key of invalid size: %v", len(publicKey))
+	}
 	var result Client
 	result.dataKey = dataKey
 	copy(result.Mac[:], mac[:])
-	copy(result.PublicKey, publicKey)
+	result.PublicKey = append([]byte(nil), publicKey...)
 	result.signer = signer
 	result.incomingMessages = make(chan Message, 1024)
 	result.messagesToEncrypt = make(chan Message, 1024)
@@ -144,6 +153,8 @@ func (c *Client) handleKeyExchange(data []byte) {
 		c.saveSession <- true
 	} else {
 		log.Printf("Invalid key exchange init")
+		log.Printf("Received public key: %v", hex.EncodeToString(theirPublicKey))
+		log.Printf("Received signature: %v", hex.EncodeToString(theirSignature))
 	}
 }
 
@@ -166,6 +177,8 @@ func (c *Client) handleNormalMessage(when time.Time, data []byte) {
 			Mac:      c.Mac,
 			Message:  plainMessage,
 		}
+	} else {
+		log.Printf("Couldn't decrypt message for %v", c.Mac)
 	}
 
 }

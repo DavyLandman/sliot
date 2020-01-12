@@ -5,10 +5,12 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/gob"
-	"golang.org/x/crypto/blake2b"
-	"golang.org/x/crypto/chacha20poly1305"
+	"fmt"
 	"io"
 	"sync/atomic"
+
+	"golang.org/x/crypto/blake2b"
+	"golang.org/x/crypto/chacha20poly1305"
 
 	"github.com/DavyLandman/sliot/server/monocypher"
 )
@@ -27,13 +29,13 @@ type EncryptedClient struct {
 
 func (p *EncryptedClient) Initialize(mac [6]byte, publicKey []byte) {
 	copy(p.Mac[:], mac[:])
-	copy(p.PublicKey, publicKey)
+	p.PublicKey = append([]byte(nil), publicKey...)
 	p.receiveCounter = 0
 	p.sendCounter = 0
 }
 
 func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature, serverPublic []byte) (publicKey []byte) {
-	if monocypher.Verify(receivedSignature, receivedPublic, p.PublicKey) {
+	if monocypher.Verify(receivedSignature, p.PublicKey, receivedPublic) {
 		private := make([]byte, monocypher.PrivateKeySize)
 		rand.Read(private)
 		publicKey := monocypher.KeyExchangePublicKey(private)
@@ -67,6 +69,8 @@ func (p *EncryptedClient) DecryptMessage(message, counter, nonce, mac []byte) (p
 			p.receiveCounter = counterFull
 			return result
 		}
+	} else {
+		fmt.Printf("Incorrect counter received: %v", counterFull)
 	}
 	return nil
 }

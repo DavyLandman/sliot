@@ -140,7 +140,7 @@ func Verify(signature, publicKey, message []byte) bool {
 	CSignature := (*C.uint8_t)(unsafe.Pointer(C.CBytes([]uint8(signature[:SignatureSize]))))
 	defer C.free(unsafe.Pointer(CSignature))
 
-	return C.int(1) == C.crypto_check(CSignature, CKey, CMessage, CSize)
+	return C.int(0) == C.crypto_check(CSignature, CKey, CMessage, CSize)
 }
 
 
