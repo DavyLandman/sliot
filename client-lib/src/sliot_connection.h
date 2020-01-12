@@ -29,17 +29,17 @@ typedef struct sliot_session {
     Start a handshake with the server to get a new shared key that can be used for sending messages, 
 
     You are responsible for sending this message to the server
-    
-    Make sure message_buffer is at least SLIOT_HANDSHAKE_SIZE
+
+    Reply with the bytes message_buffer.
 */
-size_t sliot_handshake_init(const sliot_config *cfg, void *message_buffer, sliot_handshake *handshake, uint8_t random_bytes[32]);
+size_t sliot_handshake_init(const sliot_config *cfg, uint8_t message_buffer[SLIOT_HANDSHAKE_SIZE], sliot_handshake *handshake, uint8_t random_bytes[32]);
 
 
 /*
     Handle handshake repsonse, either sets up a session in the session structure, or returns false if it failed for some kind of reason
 
 */
-bool sliot_handshake_finish(const sliot_config *cfg, sliot_handshake *handshake, sliot_session *session, const void* received_message, size_t message_size);
+bool sliot_handshake_finish(const sliot_config *cfg, sliot_handshake *handshake, sliot_session *session, const uint8_t* received_message, size_t message_size);
 
 
 #define SLIOT_OVERHEAD (1 + 2 + 2 + 24 + 16)
@@ -48,13 +48,13 @@ bool sliot_handshake_finish(const sliot_config *cfg, sliot_handshake *handshake,
 
     returns 0 if the session is incorrect
 */
-size_t sliot_encrypt(sliot_session *session, const void *plaintext, uint16_t length, void* ciphertext, const uint8_t random_bytes[24]);
+size_t sliot_encrypt(sliot_session *session, const uint8_t *plaintext, uint16_t length, uint8_t* ciphertext, const uint8_t random_bytes[24]);
 
 /*
     decrypt an incoming message into the plaintext buffer, plain text should hold at least (length - SLIOT_OVERHEAD) room
 
     returns the size of the data decrypted, 0 if failure for some reason
 */
-uint16_t sliot_decrypt(sliot_session *session, const void *ciphertext, size_t length, void *plaintext);
+uint16_t sliot_decrypt(sliot_session *session, const uint8_t *ciphertext, size_t length, uint8_t *plaintext);
 
 #endif

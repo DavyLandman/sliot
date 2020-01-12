@@ -12,7 +12,6 @@ package clientlib
 import "C"
 
 import (
-	"unsafe"
 	"fmt"
 	"crypto/rand"
 )
@@ -61,14 +60,14 @@ func (cfg *Config) HandshakeInit() (*Handshake, []byte) {
 	rand.Read(randomBytes[:])
 	var result Handshake
 	result.config = cfg
-	messageSize := C.sliot_handshake_init(&cfg.actual, unsafe.Pointer(&message[0]), &result.actual, (*C.uint8_t)(&randomBytes[0]))
+	messageSize := C.sliot_handshake_init(&cfg.actual, (*C.uint8_t)(&message[0]), &result.actual, (*C.uint8_t)(&randomBytes[0]))
 	return &result, message[:messageSize]
 }
 
 func (h *Handshake) Finish(response []byte) (*Session) {
 	var result Session
 	result.config = h.config
-	if C.sliot_handshake_finish(&h.config.actual, &h.actual,  &result.actual, unsafe.Pointer(&response[0]), C.size_t(len(response))) {
+	if C.sliot_handshake_finish(&h.config.actual, &h.actual,  &result.actual, (*C.uint8_t)(&response[0]), C.size_t(len(response))) {
 		return &result
 	}
 	return nil
@@ -78,7 +77,7 @@ func (s *Session) Encrypt(plaintext []byte) (ciphertext []byte) {
 	result := make([]byte, len(plaintext) + C.SLIOT_OVERHEAD)
 	var randomBytes [24]byte
 	rand.Read(randomBytes[:])
-	encrypted := C.sliot_encrypt(&s.actual, unsafe.Pointer(&plaintext[0]), C.uint16_t(len(plaintext)), unsafe.Pointer(&result[0]), (*C.uint8_t)(&randomBytes[0]))
+	encrypted := C.sliot_encrypt(&s.actual, (*C.uint8_t)(&plaintext[0]), C.uint16_t(len(plaintext)), (*C.uint8_t)(&result[0]), (*C.uint8_t)(&randomBytes[0]))
 	if encrypted > 0 {
 		return result[:encrypted]
 	}
@@ -87,7 +86,7 @@ func (s *Session) Encrypt(plaintext []byte) (ciphertext []byte) {
 
 func (s *Session) Decrypt(ciphertext []byte) (plaintext []byte) {
 	result := make([]byte, len(ciphertext))
-	decrypted := C.sliot_decrypt(&s.actual, unsafe.Pointer(&ciphertext[0]), C.size_t(len(ciphertext)), unsafe.Pointer(&result[0]))
+	decrypted := C.sliot_decrypt(&s.actual, (*C.uint8_t)(&ciphertext[0]), C.size_t(len(ciphertext)), (*C.uint8_t)(&result[0]))
 	if decrypted > 0 {
 		return result[:decrypted]
 	}

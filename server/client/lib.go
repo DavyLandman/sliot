@@ -134,8 +134,8 @@ func (c *Client) handleKeyExchange(data []byte) {
 		log.Printf("DH: not right sized message recevied %v\n", data)
 		return
 	}
-	theirSignature := data[:64]
-	theirPublicKey := data[64:]
+	theirPublicKey := data[:32]
+	theirSignature := data[32:]
 	replyPublic := c.encrypted.KeyExchangeReply(theirPublicKey, theirSignature, c.signer.Public().([]byte))
 	if replyPublic != nil {
 		replySignature, err := c.signer.Sign(nil, replyPublic, crypto.Hash(0))
@@ -144,8 +144,8 @@ func (c *Client) handleKeyExchange(data []byte) {
 		}
 		var response bytes.Buffer
 		response.WriteByte(0x01)
-		response.Write(replySignature)
 		response.Write(replyPublic)
+		response.Write(replySignature)
 		c.outgoingMessages <- Message{
 			Mac:     c.Mac,
 			Message: response.Bytes(),
