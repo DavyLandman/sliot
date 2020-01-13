@@ -24,4 +24,4 @@ jobs:
       run: cd tests && go build -v .
       
     - name: Run integration tests
-      run: tests/main
+      run: tests/test
