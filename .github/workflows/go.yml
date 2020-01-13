@@ -14,9 +14,14 @@ jobs:
         go-version: 1.13
       id: go
       
+    - name: Check out code
+      uses: actions/checkout@v2
+      
     - name: Get dependencies
       run: cd tests && go get -v -t -d ./...
+      
     - name: Build integration tests
       run: cd tests && go build -v .
+      
     - name: Run integration tests
       run: tests/main
