@@ -15,11 +15,8 @@ jobs:
       id: go
       
     - name: Get dependencies
-      run: |
-          cd test && go get -v -t -d ./...
-          
-  
+      run: cd tests && go get -v -t -d ./...
     - name: Build integration tests
-      run: cd test && go build -v .
+      run: cd tests && go build -v .
     - name: Run integration tests
-      run: test/main
+      run: tests/main
