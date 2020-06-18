@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"crypto/cipher"
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/gob"
@@ -9,10 +10,11 @@ import (
 	"io"
 	"sync/atomic"
 
-	"golang.org/x/crypto/blake2b"
-	"golang.org/x/crypto/chacha20poly1305"
+	"crypto/ed25519"
+	"crypto/sha512"
 
-	"github.com/DavyLandman/sliot/server/monocypher"
+	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/crypto/curve25519"
 )
 
 const (
@@ -23,6 +25,7 @@ type EncryptedClient struct {
 	Mac            [6]byte
 	PublicKey      []byte
 	sessionKey     []byte
+	sessionCrypto  cipher.AEAD
 	receiveCounter uint32
 	sendCounter    uint32
 }
@@ -35,18 +38,29 @@ func (p *EncryptedClient) Initialize(mac [6]byte, publicKey []byte) {
 }
 
 func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature, serverPublic []byte) (publicKey []byte) {
-	if monocypher.Verify(receivedSignature, p.PublicKey, receivedPublic) {
-		private := make([]byte, monocypher.PrivateKeySize)
+	if ed25519.Verify(p.PublicKey, receivedPublic, receivedSignature) {
+		private := make([]byte, curve25519.ScalarSize)
 		rand.Read(private)
-		publicKey := monocypher.KeyExchangePublicKey(private)
-		sharedSecret := monocypher.KeyExchange(private, receivedPublic)
+		publicKey, err := curve25519.X25519(private, curve25519.Basepoint)
+		if err != nil {
+			return nil
+		}
+		sharedSecret, err := curve25519.X25519(private, receivedPublic)
+		if err != nil {
+			return nil
+		}
 
-		hasher, _ := blake2b.New(monocypher.AEADKeySize, nil)
+		hasher := sha512.New()
 		hasher.Write(sharedSecret)
 		hasher.Write(serverPublic)
 		hasher.Write(p.PublicKey)
 
-		p.sessionKey = hasher.Sum(nil)
+		p.sessionKey = hasher.Sum(nil)[:SessionKeySize]
+		sessionCrypto, err := chacha20poly1305.New(p.sessionKey)
+		if err != nil {
+			return nil
+		}
+		p.sessionCrypto = sessionCrypto
 		p.receiveCounter = 0
 		p.sendCounter = 0
 
@@ -64,8 +78,8 @@ func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature, se
 func (p *EncryptedClient) DecryptMessage(message, counter, nonce, mac []byte) (plaintext []byte) {
 	counterFull := uint32(counter[0]) | uint32(counter[1])<<8
 	if counterFull > p.receiveCounter {
-		result := monocypher.UnlockAEAD(message, nonce, p.sessionKey, mac, counter)
-		if result != nil {
+		result, err := p.sessionCrypto.Open(nil, nonce, message, counter)
+		if result != nil && err == nil {
 			p.receiveCounter = counterFull
 			return result
 		}
@@ -75,15 +89,15 @@ func (p *EncryptedClient) DecryptMessage(message, counter, nonce, mac []byte) (p
 	return nil
 }
 
-func (p *EncryptedClient) EncryptMessage(message []byte) (cipherText, counter, nonce, mac []byte) {
+func (p *EncryptedClient) EncryptMessage(message []byte) (cipherText, counter, nonce []byte) {
 	nextCounter := atomic.AddUint32(&p.sendCounter, 1)
 	counterBytes := new(bytes.Buffer)
 	binary.Write(counterBytes, binary.LittleEndian, uint16(nextCounter))
 	counter = counterBytes.Bytes()
-	nonce = make([]byte, monocypher.NonceSize)
+	nonce = make([]byte, p.sessionCrypto.NonceSize())
 	rand.Read(nonce)
-	mac, cipherText = monocypher.LockAEAD(cipherText, nonce, p.sessionKey, counter)
-	return cipherText, counter, nonce, mac
+	cipherText = p.sessionCrypto.Seal(nil, nonce, message, counter)
+	return
 }
 
 type privatePeerData struct {
@@ -142,6 +156,10 @@ func (p *EncryptedClient) RestoreSession(source io.Reader, dataKey []byte) error
 		return err
 	}
 	p.sessionKey = serializedData.SessionKey
+	p.sessionCrypto, err = chacha20poly1305.New(p.sessionKey)
+	if err != nil {
+		return err
+	}
 	p.receiveCounter = serializedData.ReceiveCounter
 	p.sendCounter = serializedData.SendCounter
 	return nil

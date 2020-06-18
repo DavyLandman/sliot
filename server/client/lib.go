@@ -11,7 +11,7 @@ import (
 	"path"
 	"time"
 
-	"github.com/DavyLandman/sliot/server/monocypher"
+	"golang.org/x/crypto/curve25519"
 )
 
 type Client struct {
@@ -39,7 +39,7 @@ func NewClient(dataPath string, dataKey []byte, mac [6]byte, publicKey []byte,
 	if len(dataKey) != SessionKeySize {
 		return nil, fmt.Errorf("Data key of invalid size: %v", len(dataKey))
 	}
-	if len(publicKey) != monocypher.PublicKeySize {
+	if len(publicKey) != curve25519.ScalarSize {
 		return nil, fmt.Errorf("Client public key of invalid size: %v", len(publicKey))
 	}
 	var result Client
@@ -116,10 +116,9 @@ func (c *Client) handleMessages() {
 			newMessage.WriteByte(0x02)
 			binary.Write(newMessage, binary.LittleEndian, uint16(len(m.Message)))
 
-			ciphertext, counter, nonce, mac := c.encrypted.EncryptMessage(m.Message)
+			ciphertext, counter, nonce := c.encrypted.EncryptMessage(m.Message)
 			newMessage.Write(counter)
 			newMessage.Write(nonce)
-			newMessage.Write(mac)
 			newMessage.Write(ciphertext)
 			c.outgoingMessages <- Message{
 				Mac:     c.Mac,
