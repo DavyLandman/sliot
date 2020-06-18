@@ -44,7 +44,7 @@ size_t sliot_handshake_init(const sliot_config *cfg, uint8_t message_buffer[SLIO
 bool sliot_handshake_finish(const sliot_config *cfg, sliot_handshake *handshake, sliot_session *session, const uint8_t* received_message, size_t message_size);
 
 
-#define SLIOT_NONCE_SIZE (24)
+#define SLIOT_NONCE_SIZE (12)
 #define SLIOT_OVERHEAD (1 + 2 + 2 + SLIOT_NONCE_SIZE + 16)
 /*
     encode a new message in this session, returns the written bytes to the ciphertext pointer, not that ciphertext should have room for length + SLIOT_OVERHEAD
