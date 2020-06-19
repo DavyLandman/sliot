@@ -1,17 +1,14 @@
 package main
 
 import (
-	"crypto/rand"
 	"encoding/base64"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"strconv"
 	"strings"
 
 	"github.com/DavyLandman/sliot/server/keys/longterm"
-	"github.com/DavyLandman/sliot/server/monocypher"
 )
 
 func main() {
@@ -34,14 +31,15 @@ func main() {
 	} else {
 		if len(longTermPublicKey) == 0 {
 			var err error
-			longTermPublicKey, err = calculatePublicKey(privateKeyFile)
+			encodedKey, err := calculatePublicKey(privateKeyFile)
 			if err != nil {
 				log.Fatalf("Must supply public key or the private key file")
 			} else {
+				longTermPublicKey = longterm.KeyToString(encodedKey)
 				log.Printf("Calculated public key: %v based on supplied private key\n", longTermPublicKey)
 			}
 		}
-		serverKey, err := base64.StdEncoding.DecodeString(longTermPublicKey)
+		serverKey, err := longterm.StringToKey(longTermPublicKey)
 		if err != nil {
 			log.Fatalf("Cannot decode public key: %v", err)
 		}
@@ -50,44 +48,37 @@ func main() {
 }
 
 func generateServerKeys() {
-	longTermPrivateKey, _ := longterm.GenerateKeyPair()
-	fmt.Println(base64.StdEncoding.EncodeToString(longTermPrivateKey))
+	longTermPrivateKey, _, err := longterm.GenerateKeyPair()
+	if err != nil {
+		log.Fatalf("Failure to generate server keys: %v", err)
+	}
+	fmt.Println(longterm.KeyToString(longTermPrivateKey))
 }
 
 func printoutPublicKey(privateKeyFile string) {
-	privateKey, err := longterm.ReadPrivateKey(privateKeyFile)
+	publicKey, err := calculatePublicKey(privateKeyFile)
 	if err != nil {
 		log.Fatalf("Failure to calculate the public key based on %v, error: %v", privateKeyFile, err)
 	}
-	publicKey := longterm.CalculatePublic(privateKey)
 	fmt.Println("** Public key")
 	fmt.Printf("* base64: \t%v\n", base64.StdEncoding.EncodeToString(publicKey))
 	fmt.Printf("* c bytes:\t%v\n", byteArray(publicKey))
 }
 
-func calculatePublicKey(privateKeyFile string) (string, error) {
-	b, err := ioutil.ReadFile(privateKeyFile)
+func calculatePublicKey(privateKeyFile string) ([]byte, error) {
+	privateKey, err := longterm.ReadPrivateKey(privateKeyFile)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	privateKey := make([]byte, monocypher.PrivateKeySize)
-	n, err := base64.StdEncoding.Decode(privateKey, b)
-	if err != nil {
-		return "", err
-	}
-	if n < len(privateKey) {
-		return "", fmt.Errorf("Unexpected amount of bytes decoded: %v", n)
-	}
-	publicKey := monocypher.SignPublicKey(privateKey)
-	return base64.StdEncoding.EncodeToString(publicKey), nil
+	return longterm.CalculatePublic(privateKey)
 }
 
 func generateClientKeys(serverKey []byte, serverMac string) {
 	fmt.Println("Generating new client keys")
-	longTermPrivateKey := make([]byte, monocypher.PrivateKeySize)
-	rand.Read(longTermPrivateKey)
-
-	longTermPublicKey := monocypher.SignPublicKey(longTermPrivateKey)
+	longTermPrivateKey, longTermPublicKey, err := longterm.GenerateKeyPair()
+	if err != nil {
+		log.Fatalf("Could not generate keys: %v", err)
+	}
 
 	fmt.Println("For client c code:")
 	fmt.Printf("static struct siot_config main_config = {\n\t%v, \n\t%v, \n\t%v, \n\t%v\n}\n",
@@ -97,7 +88,7 @@ func generateClientKeys(serverKey []byte, serverMac string) {
 		macByteArray(serverMac),
 	)
 	fmt.Println("For config.toml:")
-	fmt.Printf("publicKey = \"%v\"\n", base64.StdEncoding.EncodeToString(longTermPublicKey))
+	fmt.Printf("publicKey = \"%v\"\n", longterm.KeyToString(longTermPublicKey))
 }
 
 func byteArray(bytes []byte) string {

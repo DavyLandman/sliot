@@ -55,7 +55,7 @@ func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature, se
 		hasher.Write(serverPublic)
 		hasher.Write(p.PublicKey)
 
-		p.sessionKey = hasher.Sum(nil)[:SessionKeySize]
+		p.sessionKey = hasher.Sum(nil)[:chacha20poly1305.KeySize]
 		sessionCrypto, err := chacha20poly1305.New(p.sessionKey)
 		if err != nil {
 			return nil

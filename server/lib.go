@@ -2,14 +2,12 @@ package server
 
 import (
 	"crypto"
-	"encoding/base64"
-	"fmt"
+	"crypto/ed25519"
 	"io"
 	"log"
 
 	"github.com/DavyLandman/sliot/server/client"
-	"github.com/DavyLandman/sliot/server/monocypher"
-
+	"github.com/DavyLandman/sliot/server/keys/longterm"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -50,12 +48,15 @@ func Start(clients []ClientConfig, dataPath, privateKey string, incomingMessages
 }
 
 func (s *Server) calculateKeys(encodedPrivateKey string) ([]byte, error) {
-	privateKey, err := getPrivateKey(encodedPrivateKey)
+	privateKey, err := longterm.StringToKey(encodedPrivateKey)
 	if err != nil {
 		return nil, err
 	}
 	s.privateKey = privateKey
-	s.PublicKey = monocypher.SignPublicKey(privateKey)
+	s.PublicKey, err = longterm.CalculatePublic(privateKey)
+	if err != nil {
+		return nil, err
+	}
 
 	// calculate data key: blake2b-256(privateKey + sign value of a static string) (we hash twice to make any kind of bruteforcing a lot more annoying)
 	hasher, err := blake2b.New(client.SessionKeySize, nil)
@@ -63,23 +64,12 @@ func (s *Server) calculateKeys(encodedPrivateKey string) ([]byte, error) {
 		return nil, err
 	}
 	hasher.Write(s.privateKey)
-	signature, err := s.Sign(nil, []byte("some bytes to sign to make the hass less predictable"), crypto.Hash(0))
+	signature, err := s.Sign(nil, []byte("some bytes to sign to make the hash less predictable"), crypto.Hash(0))
 	if err != nil {
 		return nil, err
 	}
 	hasher.Write(signature)
 	return hasher.Sum(nil), nil
-}
-
-func getPrivateKey(encodedString string) ([]byte, error) {
-	result, err := base64.StdEncoding.DecodeString(encodedString)
-	if err != nil {
-		return nil, err
-	}
-	if len(result) != monocypher.PrivateKeySize {
-		return nil, fmt.Errorf("Failed to decode private key, only got %v bytes", len(result))
-	}
-	return result, nil
 }
 
 func (s *Server) Close() {
@@ -153,5 +143,5 @@ func (s *Server) Public() crypto.PublicKey {
 }
 
 func (s *Server) Sign(rand io.Reader, msg []byte, opts crypto.SignerOpts) (signature []byte, err error) {
-	return monocypher.Sign(s.privateKey, msg), nil
+	return ed25519.Sign(s.privateKey, msg), nil
 }
