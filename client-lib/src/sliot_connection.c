@@ -1,6 +1,6 @@
 #include "sliot_connection.h"
-#include "portable8439.h"
-#include "compact25519.h"
+#include "crypto/portable8439.h"
+#include "crypto/compact25519.h"
 #ifdef DEBUG
 #include <stdio.h>
 #endif

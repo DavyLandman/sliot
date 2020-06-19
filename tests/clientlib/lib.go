@@ -6,8 +6,8 @@ package clientlib
 // // workaround for c files in a different directory:
 // #cgo CFLAGS: -I${SRCDIR}/../../client-lib/src
 // #include "sliot_connection.c"
-// #include "compact25519.c"
-// #include "portable8439.c"
+// #include "crypto/compact25519.c"
+// #include "crypto/portable8439.c"
 // // workaround so that we can import monocypher twice
 // #cgo LDFLAGS: -Wl,--allow-multiple-definition
 import "C"

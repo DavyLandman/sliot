@@ -5,18 +5,9 @@
     "description": "Library that handles encryption for IOT",
     "repository": {
         "type": "git",
-        "url": "https://github.com/DavyLandman/secure-local-iot-network"
+        "url": "https://github.com/DavyLandman/sliot"
     },
     "include" : "src/",
-    "exclude" : [
-        "user_config.h",
-        "demo.cpp"
-    ],
-    "depends": [
-        "Monocypher"
-    ],
-    "platforms": [
-        "espressif8266"
-    ],
+    "platforms": "*",
     "frameworks" : "*"
 }
