@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"log"
@@ -61,7 +60,7 @@ func printoutPublicKey(privateKeyFile string) {
 		log.Fatalf("Failure to calculate the public key based on %v, error: %v", privateKeyFile, err)
 	}
 	fmt.Println("** Public key")
-	fmt.Printf("* base64: \t%v\n", base64.StdEncoding.EncodeToString(publicKey))
+	fmt.Printf("* base64: \t%v\n", longterm.KeyToString(publicKey))
 	fmt.Printf("* c bytes:\t%v\n", byteArray(publicKey))
 }
 

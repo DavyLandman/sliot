@@ -42,8 +42,8 @@ func main() {
 	}
 
 	log.Println("Got stuff setup")
-	log.Printf("Server: %v\n", fakeServer)
-	log.Printf("Client: %v\n", fakeClient)
+	log.Printf("Server: \n%v\n", fakeServer)
+	log.Printf("Client: \n%v\n", fakeClient)
 
 	handshake, msg := fakeClient.HandshakeInit()
 	log.Printf("Handshake started from client, msg: %v", msg)
