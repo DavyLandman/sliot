@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto"
+	"crypto/cipher"
 	"crypto/ed25519"
 	"io"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"github.com/DavyLandman/sliot/server/client"
 	"github.com/DavyLandman/sliot/server/keys/longterm"
 	"golang.org/x/crypto/blake2b"
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
 type Server struct {
@@ -37,7 +39,13 @@ func Start(clients []ClientConfig, dataPath, privateKey string, incomingMessages
 	result.inbox = make(chan client.Message, 1024)
 	result.outbox = make(chan client.Message, 1024)
 
-	err = result.load(clients, dataPath, dataKey, outgoingMessages)
+	sessionCipher, err := chacha20poly1305.NewX(dataKey)
+	if err != nil {
+		result.Close()
+		return nil, err
+	}
+
+	err = result.load(clients, dataPath, sessionCipher, outgoingMessages)
 	if err != nil {
 		result.Close()
 		return nil, err
@@ -124,11 +132,11 @@ func (s *Server) forwardIncoming() {
 	}
 }
 
-func (s *Server) load(clients []ClientConfig, dataPath string, dataKey []byte, outgoingMessages chan<- client.Message) error {
+func (s *Server) load(clients []ClientConfig, sessionPath string, sessionCipher cipher.AEAD, outgoingMessages chan<- client.Message) error {
 	s.clients = make(map[uint64]*client.Client)
 	for _, c := range clients {
 		id := client.MacToId(c.Mac)
-		newClient, err := client.NewClient(dataPath, dataKey, c.Mac, c.PublicKey, outgoingMessages, s.inbox, s)
+		newClient, err := client.NewClient(sessionPath, sessionCipher, c.Mac, c.PublicKey, outgoingMessages, s.inbox, s)
 		if err != nil {
 			return err
 		}

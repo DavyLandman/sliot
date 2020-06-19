@@ -23,7 +23,6 @@ const (
 )
 
 type EncryptedClient struct {
-	Mac            [6]byte
 	PublicKey      []byte
 	sessionKey     []byte
 	sessionCrypto  cipher.AEAD
@@ -31,8 +30,7 @@ type EncryptedClient struct {
 	sendCounter    uint32
 }
 
-func (p *EncryptedClient) Initialize(mac [6]byte, publicKey []byte) {
-	copy(p.Mac[:], mac[:])
+func (p *EncryptedClient) Initialize(publicKey []byte) {
 	p.PublicKey = append([]byte(nil), publicKey...)
 	p.receiveCounter = 0
 	p.sendCounter = 0
@@ -107,35 +105,27 @@ type privatePeerData struct {
 	SendCounter    uint32
 }
 
-func (p EncryptedClient) SaveSession(target io.Writer, dataKey []byte) error {
+func (p EncryptedClient) SaveSession(target io.Writer, sessionCipher cipher.AEAD) error {
 	var rawMessage bytes.Buffer
 	err := gob.NewEncoder(&rawMessage).Encode(privatePeerData{p.sessionKey, p.receiveCounter, p.sendCounter})
 	if err != nil {
 		return err
 	}
-	cipher, err := chacha20poly1305.NewX(dataKey)
-	if err != nil {
-		return err
-	}
-	nonce := make([]byte, cipher.NonceSize())
+
+	nonce := make([]byte, sessionCipher.NonceSize())
 	rand.Read(nonce)
 	_, err = target.Write(nonce)
 	if err != nil {
 		return err
 	}
 
-	_, err = target.Write(cipher.Seal(nil, nonce, rawMessage.Bytes(), p.PublicKey))
+	_, err = target.Write(sessionCipher.Seal(nil, nonce, rawMessage.Bytes(), p.PublicKey))
 	return err
 }
 
-func (p *EncryptedClient) RestoreSession(source io.Reader, dataKey []byte) error {
-	cipher, err := chacha20poly1305.NewX(dataKey)
-	if err != nil {
-		return err
-	}
-
-	nonce := make([]byte, cipher.NonceSize())
-	_, err = source.Read(nonce)
+func (p *EncryptedClient) RestoreSession(source io.Reader, sessionCipher cipher.AEAD) error {
+	nonce := make([]byte, sessionCipher.NonceSize())
+	_, err := source.Read(nonce)
 	if err != nil {
 		return err
 	}
@@ -146,7 +136,7 @@ func (p *EncryptedClient) RestoreSession(source io.Reader, dataKey []byte) error
 		return err
 	}
 
-	decrypted, err := cipher.Open(nil, nonce, cipherText.Bytes(), p.PublicKey)
+	decrypted, err := sessionCipher.Open(nil, nonce, cipherText.Bytes(), p.PublicKey)
 	if err != nil {
 		return err
 	}

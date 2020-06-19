@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"crypto"
+	"crypto/cipher"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -18,7 +19,7 @@ type Client struct {
 	Mac               [6]byte
 	PublicKey         []byte
 	sessionFile       string
-	dataKey           []byte
+	sessionCipher     cipher.AEAD
 	encrypted         EncryptedClient
 	outgoingMessages  chan<- Message
 	incomingMessages  chan Message
@@ -34,16 +35,12 @@ type Message struct {
 	Message  []byte
 }
 
-func NewClient(dataPath string, dataKey []byte, mac [6]byte, publicKey []byte,
+func NewClient(sessionPath string, sessionCipher cipher.AEAD, mac [6]byte, publicKey []byte,
 	outgoingMessages chan<- Message, decryptedMessages chan<- Message, signer crypto.Signer) (*Client, error) {
-	if len(dataKey) != SessionKeySize {
-		return nil, fmt.Errorf("Data key of invalid size: %v", len(dataKey))
-	}
 	if len(publicKey) != curve25519.ScalarSize {
 		return nil, fmt.Errorf("Client public key of invalid size: %v", len(publicKey))
 	}
 	var result Client
-	result.dataKey = dataKey
 	copy(result.Mac[:], mac[:])
 	result.PublicKey = append([]byte(nil), publicKey...)
 	result.signer = signer
@@ -51,17 +48,19 @@ func NewClient(dataPath string, dataKey []byte, mac [6]byte, publicKey []byte,
 	result.messagesToEncrypt = make(chan Message, 1024)
 	result.outgoingMessages = outgoingMessages
 	result.decryptedMessages = decryptedMessages
-	result.saveSession = make(chan bool, 10)
+	result.encrypted.Initialize(result.PublicKey)
 
-	result.sessionFile = fileName(dataPath, mac)
-	result.encrypted.Initialize(mac, publicKey)
+	result.saveSession = make(chan bool, 10)
+	result.sessionCipher = sessionCipher
+	result.sessionFile = fileName(sessionPath, mac)
+
 	if info, err := os.Stat(result.sessionFile); err == nil && !info.IsDir() {
 		data, err := os.Open(result.sessionFile)
 		if err != nil {
 			return nil, err
 		}
 		defer data.Close()
-		result.encrypted.RestoreSession(data, dataKey)
+		result.encrypted.RestoreSession(data, sessionCipher)
 	}
 
 	go result.periodicSessionBackup()
@@ -181,8 +180,8 @@ func (c *Client) handleNormalMessage(when time.Time, data []byte) {
 
 }
 
-func (c *Client) GetId() uint64 {
-	return MacToId(c.encrypted.Mac)
+func (c *Client) GetID() uint64 {
+	return MacToId(c.Mac)
 }
 
 func (c *Client) periodicSessionBackup() {
@@ -196,7 +195,7 @@ func (c *Client) periodicSessionBackup() {
 		}
 		data, err := os.Create(c.sessionFile)
 		if err == nil {
-			err = c.encrypted.SaveSession(data, c.dataKey)
+			err = c.encrypted.SaveSession(data, c.sessionCipher)
 			data.Close()
 			if err != nil {
 				log.Printf("Error saving session: %v\n", data)

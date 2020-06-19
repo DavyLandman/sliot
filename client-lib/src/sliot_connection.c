@@ -125,7 +125,7 @@ struct PACKED message_header {
 */
 
 size_t sliot_encrypt(sliot_session *session, const uint8_t *plaintext, uint16_t length, uint8_t* ciphertext, const uint8_t random_bytes[SLIOT_NONCE_SIZE]) {
-    if (session == NULL || plaintext == NULL | ciphertext == NULL || random_bytes == NULL) {
+    if ((session == NULL) || (plaintext == NULL) | (ciphertext == NULL) || (random_bytes == NULL)) {
         return 0;
     }
     *ciphertext++ = MESSAGE;
@@ -144,7 +144,7 @@ size_t sliot_encrypt(sliot_session *session, const uint8_t *plaintext, uint16_t 
 }
 
 uint16_t sliot_decrypt(sliot_session *session, const uint8_t *ciphertext, size_t length, uint8_t *plaintext) {
-    if (session == NULL || plaintext == NULL | ciphertext == NULL) {
+    if ((session == NULL) || (plaintext == NULL) | (ciphertext == NULL)) {
         return 0;
     }
     if (*ciphertext++ != MESSAGE) {
