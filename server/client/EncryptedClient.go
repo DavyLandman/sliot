@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	SessionKeySize = chacha20poly1305.KeySize
+	SessionKeySize     = chacha20poly1305.KeySize
+	EncryptionOverhead = 16
 )
 
 type EncryptedClient struct {
@@ -75,7 +76,7 @@ func (p *EncryptedClient) KeyExchangeReply(receivedPublic, receivedSignature, se
 	return nil
 }
 
-func (p *EncryptedClient) DecryptMessage(message, counter, nonce, mac []byte) (plaintext []byte) {
+func (p *EncryptedClient) DecryptMessage(message, counter, nonce []byte) (plaintext []byte) {
 	counterFull := uint32(counter[0]) | uint32(counter[1])<<8
 	if counterFull > p.receiveCounter {
 		result, err := p.sessionCrypto.Open(nil, nonce, message, counter)

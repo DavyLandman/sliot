@@ -22,7 +22,7 @@ func CalculatePublic(privateKey []byte) (publicKey []byte, err error) {
 	return publicKey, nil
 }
 
-func GenerateKeyPair() (longTermPrivate, longTermPublic []byte, err error) {
+func GenerateKeyPair() (longTermPublic, longTermPrivate []byte, err error) {
 	return ed25519.GenerateKey(rand.Reader)
 }
 
@@ -32,7 +32,7 @@ func KeyToString(key []byte) string {
 
 func StringToKey(key string) (result []byte, err error) {
 	result, err = base64.StdEncoding.DecodeString(key)
-	if err == nil && (len(result) != ed25519.PrivateKeySize || len(result) != ed25519.PublicKeySize) {
+	if err == nil && (len(result) != ed25519.PrivateKeySize && len(result) != ed25519.PublicKeySize) {
 		err = fmt.Errorf("Key file not right size: %v", len(result))
 	}
 	return

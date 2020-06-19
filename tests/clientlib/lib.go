@@ -32,10 +32,10 @@ type Session struct {
 }
 
 func safeCopy32(target *[32]C.uint8_t, source []byte) error {
-	if len(source) != 32 {
+	if len(source) < 32 {
 		return fmt.Errorf("Incorrect source length: %v", len(source))
 	}
-	for i := range source {
+	for i := range source[:32] {
 		target[i] = (C.uint8_t)(source[i])
 	}
 	return nil

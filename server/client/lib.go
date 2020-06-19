@@ -162,14 +162,13 @@ func (c *Client) handleNormalMessage(when time.Time, data []byte) {
 	var msgSize uint16
 	binary.Read(reader, binary.LittleEndian, &msgSize)
 	counter := reader.Next(2)
-	nonce := reader.Next(24)
-	mac := reader.Next(16)
-	cipherText := reader.Next(int(uint8(msgSize)))
-	if len(cipherText) != int(uint8(msgSize)) {
-		log.Printf("Incorrect message received, expected %v but got only %v", uint8(msgSize), len(cipherText))
+	nonce := reader.Next(12)
+	cipherText := reader.Next(int(msgSize) + EncryptionOverhead)
+	if len(cipherText) != int(uint8(msgSize)+EncryptionOverhead) {
+		log.Printf("Incorrect message received, expected %v but got only %v", uint8(msgSize)+EncryptionOverhead, len(cipherText))
 		return
 	}
-	plainMessage := c.encrypted.DecryptMessage(cipherText, counter, nonce, mac)
+	plainMessage := c.encrypted.DecryptMessage(cipherText, counter, nonce)
 	if plainMessage != nil {
 		c.decryptedMessages <- Message{
 			Received: when,

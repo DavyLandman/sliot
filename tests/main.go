@@ -17,8 +17,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	serverPrivateKey, serverPublicKey := longterm.GenerateKeyPair()
-	clientPrivateKey, clientPublicKey := longterm.GenerateKeyPair()
+	serverPublicKey, serverPrivateKey, err := longterm.GenerateKeyPair()
+	if err != nil {
+		log.Fatal(err)
+	}
+	clientPublicKey, clientPrivateKey, err := longterm.GenerateKeyPair()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	clientMac := [6]byte{0, 1, 2, 3, 4, 5}
 	clientConf := server.ClientConfig{clientMac, clientPublicKey}
@@ -26,8 +32,14 @@ func main() {
 	incoming := make(chan client.Message, 200)
 	outgoing := make(chan client.Message, 200)
 	fakeServer, err := server.Start([]server.ClientConfig{clientConf}, dataFolder, longterm.KeyToString(serverPrivateKey), incoming, outgoing)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	fakeClient, err := clientlib.CreateConfig(clientPrivateKey, clientPublicKey, serverPublicKey)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	log.Println("Got stuff setup")
 	log.Printf("Server: %v\n", fakeServer)

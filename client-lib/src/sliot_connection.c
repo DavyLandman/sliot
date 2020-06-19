@@ -86,7 +86,7 @@ bool sliot_handshake_finish(const sliot_config *cfg, sliot_handshake *handshake,
         // valid signed DH exchange
 
         crypto_feed_watchdog();
-        uint32_t shared_key[X25519_SHARED_SIZE];
+        uint8_t shared_key[X25519_SHARED_SIZE];
         compact_x25519_shared(shared_key, handshake->private_key, received_message);
         crypto_feed_watchdog();
         

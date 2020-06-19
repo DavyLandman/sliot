@@ -48,7 +48,7 @@ func main() {
 }
 
 func generateServerKeys() {
-	longTermPrivateKey, _, err := longterm.GenerateKeyPair()
+	_, longTermPrivateKey, err := longterm.GenerateKeyPair()
 	if err != nil {
 		log.Fatalf("Failure to generate server keys: %v", err)
 	}
@@ -75,7 +75,7 @@ func calculatePublicKey(privateKeyFile string) ([]byte, error) {
 
 func generateClientKeys(serverKey []byte, serverMac string) {
 	fmt.Println("Generating new client keys")
-	longTermPrivateKey, longTermPublicKey, err := longterm.GenerateKeyPair()
+	longTermPublicKey, longTermPrivateKey, err := longterm.GenerateKeyPair()
 	if err != nil {
 		log.Fatalf("Could not generate keys: %v", err)
 	}
