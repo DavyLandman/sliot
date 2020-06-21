@@ -132,7 +132,8 @@ size_t sliot_encrypt(sliot_session *session, const uint8_t *plaintext, uint16_t 
     write_uint16(ciphertext, length);
     ciphertext += __SLIOT_UINT16_SIZE;
     uint8_t *ad = ciphertext;
-    write_uint16(ciphertext, ++(session->send_counter));
+    session->send_counter++;
+    write_uint16(ciphertext, session->send_counter);
     ciphertext += __SLIOT_UINT16_SIZE;
     memcpy_portable(ciphertext, random_bytes, SLIOT_NONCE_SIZE);
     ciphertext += SLIOT_NONCE_SIZE;

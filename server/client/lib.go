@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/cipher"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -16,7 +17,7 @@ import (
 )
 
 type Client struct {
-	Mac               [6]byte
+	ClientId          interface{}
 	PublicKey         []byte
 	sessionFile       string
 	sessionCipher     cipher.AEAD
@@ -31,17 +32,17 @@ type Client struct {
 
 type Message struct {
 	Received time.Time
-	Mac      [6]byte
+	ClientId interface{}
 	Message  []byte
 }
 
-func NewClient(sessionPath string, sessionCipher cipher.AEAD, mac [6]byte, publicKey []byte,
+func NewClient(sessionPath string, sessionCipher cipher.AEAD, clientId interface{}, publicKey []byte,
 	outgoingMessages chan<- Message, decryptedMessages chan<- Message, signer crypto.Signer) (*Client, error) {
 	if len(publicKey) != curve25519.ScalarSize {
 		return nil, fmt.Errorf("Client public key of invalid size: %v", len(publicKey))
 	}
 	var result Client
-	copy(result.Mac[:], mac[:])
+	result.ClientId = clientId
 	result.PublicKey = append([]byte(nil), publicKey...)
 	result.signer = signer
 	result.incomingMessages = make(chan Message, 1024)
@@ -52,7 +53,7 @@ func NewClient(sessionPath string, sessionCipher cipher.AEAD, mac [6]byte, publi
 
 	result.saveSession = make(chan bool, 10)
 	result.sessionCipher = sessionCipher
-	result.sessionFile = fileName(sessionPath, mac)
+	result.sessionFile = fileName(sessionPath, publicKey)
 
 	if info, err := os.Stat(result.sessionFile); err == nil && !info.IsDir() {
 		data, err := os.Open(result.sessionFile)
@@ -88,10 +89,10 @@ func (c *Client) handleMessages() {
 			if !active {
 				return
 			}
-			if m.Mac != c.Mac {
+			if m.ClientId != c.ClientId {
 				log.Fatalf("Received message not intended for me: %v", m)
 			}
-			if len(m.Message) < 2 {
+			if len(m.Message) < 1 {
 				log.Printf("To short of a message received %v\n", m)
 				return
 			}
@@ -108,7 +109,7 @@ func (c *Client) handleMessages() {
 			if !active {
 				return
 			}
-			if m.Mac != c.Mac {
+			if m.ClientId != c.ClientId {
 				log.Fatalf("Received message not intended for me: %v", m)
 			}
 			newMessage := new(bytes.Buffer)
@@ -120,8 +121,8 @@ func (c *Client) handleMessages() {
 			newMessage.Write(nonce)
 			newMessage.Write(ciphertext)
 			c.outgoingMessages <- Message{
-				Mac:     c.Mac,
-				Message: newMessage.Bytes(),
+				ClientId: m.ClientId,
+				Message:  newMessage.Bytes(),
 			}
 		}
 	}
@@ -145,8 +146,8 @@ func (c *Client) handleKeyExchange(data []byte) {
 		response.Write(replyPublic)
 		response.Write(replySignature)
 		c.outgoingMessages <- Message{
-			Mac:     c.Mac,
-			Message: response.Bytes(),
+			ClientId: c.ClientId,
+			Message:  response.Bytes(),
 		}
 		c.saveSession <- true
 	} else {
@@ -163,25 +164,21 @@ func (c *Client) handleNormalMessage(when time.Time, data []byte) {
 	counter := reader.Next(2)
 	nonce := reader.Next(12)
 	cipherText := reader.Next(int(msgSize) + EncryptionOverhead)
-	if len(cipherText) != int(uint8(msgSize)+EncryptionOverhead) {
-		log.Printf("Incorrect message received, expected %v but got only %v", uint8(msgSize)+EncryptionOverhead, len(cipherText))
+	if len(cipherText) != (int(msgSize) + EncryptionOverhead) {
+		log.Printf("Incorrect message received, expected %v but got only %v", int(msgSize)+EncryptionOverhead, len(cipherText))
 		return
 	}
 	plainMessage := c.encrypted.DecryptMessage(cipherText, counter, nonce)
 	if plainMessage != nil {
 		c.decryptedMessages <- Message{
 			Received: when,
-			Mac:      c.Mac,
+			ClientId: c.ClientId,
 			Message:  plainMessage,
 		}
 	} else {
-		log.Printf("Couldn't decrypt message for %v", c.Mac)
+		log.Printf("Couldn't decrypt message for %v", c.ClientId)
 	}
 
-}
-
-func (c *Client) GetID() uint64 {
-	return MacToId(c.Mac)
 }
 
 func (c *Client) periodicSessionBackup() {
@@ -205,10 +202,8 @@ func (c *Client) periodicSessionBackup() {
 
 }
 
-func fileName(root string, mac [6]byte) string {
-	return path.Join(root,
-		fmt.Sprintf("%02x%02x%02x%02x%02x%02x.session",
-			mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]))
+func fileName(root string, publicKey []byte) string {
+	return path.Join(root, base64.RawURLEncoding.EncodeToString(publicKey))
 }
 
 func MacToId(mac [6]byte) uint64 {

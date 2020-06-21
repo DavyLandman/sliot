@@ -7,6 +7,9 @@ import (
 	"io"
 	"log"
 
+	"github.com/OneOfOne/xxhash"
+	"github.com/mitchellh/hashstructure"
+
 	"github.com/DavyLandman/sliot/server/client"
 	"github.com/DavyLandman/sliot/server/keys/longterm"
 	"golang.org/x/crypto/blake2b"
@@ -24,7 +27,7 @@ type Server struct {
 }
 
 type ClientConfig struct {
-	Mac       [6]byte
+	ClientId  interface{}
 	PublicKey []byte
 }
 
@@ -110,11 +113,11 @@ func (s *Server) forwardIncoming() {
 			if !open {
 				return
 			}
-			c := s.clients[client.MacToId(m.Mac)]
+			c := s.clients[toKey(m.ClientId)]
 			if c != nil {
 				c.NewOutgoingMessage(m)
 			} else {
-				log.Printf("Dropping message from %v (not in client table)\n", m.Mac)
+				log.Printf("Dropping message from %v (not in client table)\n", m.ClientId)
 			}
 
 		case m, open := <-s.incomingMessages:
@@ -122,11 +125,11 @@ func (s *Server) forwardIncoming() {
 				close(s.stopped)
 				return
 			}
-			c := s.clients[client.MacToId(m.Mac)]
+			c := s.clients[toKey(m.ClientId)]
 			if c != nil {
 				c.NewIncomingMessage(m)
 			} else {
-				log.Printf("Dropping message from %v (not in client table)\n", m.Mac)
+				log.Printf("Dropping message from %v (not in client table)\n", m.ClientId)
 			}
 		}
 	}
@@ -135,15 +138,22 @@ func (s *Server) forwardIncoming() {
 func (s *Server) load(clients []ClientConfig, sessionPath string, sessionCipher cipher.AEAD, outgoingMessages chan<- client.Message) error {
 	s.clients = make(map[uint64]*client.Client)
 	for _, c := range clients {
-		id := client.MacToId(c.Mac)
-		newClient, err := client.NewClient(sessionPath, sessionCipher, c.Mac, c.PublicKey, outgoingMessages, s.inbox, s)
+		newClient, err := client.NewClient(sessionPath, sessionCipher, c.ClientId, c.PublicKey, outgoingMessages, s.inbox, s)
 		if err != nil {
 			return err
 		}
-		s.clients[id] = newClient
+		s.clients[toKey(c.ClientId)] = newClient
 	}
 
 	return nil
+}
+
+func toKey(id interface{}) uint64 {
+	result, err := hashstructure.Hash(id, &hashstructure.HashOptions{Hasher: xxhash.New64()})
+	if err != nil {
+		log.Fatalf("Cannot calculate has for: %v", id)
+	}
+	return result
 }
 
 func (s *Server) Public() crypto.PublicKey {

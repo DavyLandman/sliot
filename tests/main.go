@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"crypto/rand"
 	"io/ioutil"
 	"log"
 	"time"
+
+	"github.com/pkg/profile"
 
 	"github.com/DavyLandman/sliot/server"
 	"github.com/DavyLandman/sliot/server/client"
@@ -12,6 +16,7 @@ import (
 )
 
 func main() {
+	defer profile.Start().Stop()
 	dataFolder, err := ioutil.TempDir("", "sliot-test")
 	if err != nil {
 		log.Fatal(err)
@@ -47,7 +52,7 @@ func main() {
 
 	handshake, msg := fakeClient.HandshakeInit()
 	log.Printf("Handshake started from client, msg: %v", msg)
-	incoming <- client.Message{Mac: clientMac, Message: msg}
+	incoming <- client.Message{ClientId: clientMac, Message: msg}
 	reply := readOrFail(outgoing, "handshake server reply")
 	log.Printf("Reply from server: %v", reply)
 	session := handshake.Finish(reply.Message)
@@ -56,15 +61,62 @@ func main() {
 	} else {
 		log.Printf("Session started: %v", session)
 	}
+
 	msg = session.Encrypt(clientMac[:])
 	if msg == nil {
 		log.Fatalf("Error in encrypting message")
 	} else {
 		log.Printf("Prepared encrypted message: %v", msg)
 	}
-	incoming <- client.Message{Mac: clientMac, Message: msg}
+	incoming <- client.Message{ClientId: clientMac, Message: msg}
 	recvMessage := readOrFail(fakeServer.GetInbox(), "decrypted message in Inbox")
 	log.Printf("Received encrypted message: %v", recvMessage)
+	if bytes.Compare(clientMac[:], recvMessage.Message) != 0 {
+		log.Fatal("Got: %v expected: %v", clientMac[:], recvMessage.Message)
+	}
+
+	// sending it a second time should fail
+	incoming <- client.Message{ClientId: clientMac, Message: msg}
+	select {
+	case received := <-fakeServer.GetInbox():
+		log.Fatalf("Got message that should have been dropped due to replay attack: %v", received)
+	case <-time.After(100 * time.Millisecond):
+		log.Println("Replay attack prevented")
+	}
+
+	msg = session.Encrypt(clientMac[:4])
+	if msg == nil {
+		log.Fatalf("Error in encrypting second message")
+	} else {
+		log.Printf("Prepared encrypted second message: %v", msg)
+	}
+	incoming <- client.Message{ClientId: clientMac, Message: msg}
+	recvMessage = readOrFail(fakeServer.GetInbox(), "decrypted message in Inbox")
+	log.Printf("Received second encrypted message: %v", recvMessage)
+
+	if bytes.Compare(clientMac[:4], recvMessage.Message) != 0 {
+		log.Fatal("Got: %v expected: %v", clientMac[:4], recvMessage.Message)
+	}
+
+	log.Println("Running small benchmark")
+	buffer := make([]byte, 2048)
+	rand.Read(buffer)
+	for j := 0; j < 20; j++ {
+		for i := 1; i < len(buffer); i++ {
+			msg = session.Encrypt(buffer[:i])
+			incoming <- client.Message{ClientId: clientMac, Message: msg}
+			select {
+			case handled := <-fakeServer.GetInbox():
+				if bytes.Compare(buffer[:i], handled.Message) != 0 {
+					log.Fatalf("Failure to receive %v bytes", i)
+				}
+			case <-time.After(100 * time.Millisecond):
+				log.Fatalf("Message never received: %v at size: %v", msg[:16], i)
+			}
+		}
+	}
+	log.Println("Succeeded")
+
 }
 
 func readOrFail(source <-chan client.Message, failMessage string) *client.Message {
@@ -72,7 +124,7 @@ func readOrFail(source <-chan client.Message, failMessage string) *client.Messag
 	case result := <-source:
 		return &result
 	case <-time.After(5 * time.Second):
-		log.Fatal("Error reading: " + failMessage)
+		log.Fatalf("Error reading: %s", failMessage)
 		return nil
 	}
 }
