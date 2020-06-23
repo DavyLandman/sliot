@@ -33,6 +33,7 @@ func main() {
 
 	clientMac := [6]byte{0, 1, 2, 3, 4, 5}
 	clientConf := server.ClientConfig{clientMac, clientPublicKey}
+	clientMac2 := [6]byte{0, 1, 2, 3, 4, 5}
 
 	incoming := make(chan client.Message, 200)
 	outgoing := make(chan client.Message, 200)
@@ -52,7 +53,7 @@ func main() {
 
 	handshake, msg := fakeClient.HandshakeInit()
 	log.Printf("Handshake started from client, msg: %v", msg)
-	incoming <- client.Message{ClientId: clientMac, Message: msg}
+	incoming <- client.Message{ClientId: clientMac2, Message: msg}
 	reply := readOrFail(outgoing, "handshake server reply")
 	log.Printf("Reply from server: %v", reply)
 	session := handshake.Finish(reply.Message)
@@ -68,7 +69,7 @@ func main() {
 	} else {
 		log.Printf("Prepared encrypted message: %v", msg)
 	}
-	incoming <- client.Message{ClientId: clientMac, Message: msg}
+	incoming <- client.Message{ClientId: clientMac2, Message: msg}
 	recvMessage := readOrFail(fakeServer.GetInbox(), "decrypted message in Inbox")
 	log.Printf("Received encrypted message: %v", recvMessage)
 	if bytes.Compare(clientMac[:], recvMessage.Message) != 0 {
@@ -76,7 +77,7 @@ func main() {
 	}
 
 	// sending it a second time should fail
-	incoming <- client.Message{ClientId: clientMac, Message: msg}
+	incoming <- client.Message{ClientId: clientMac2, Message: msg}
 	select {
 	case received := <-fakeServer.GetInbox():
 		log.Fatalf("Got message that should have been dropped due to replay attack: %v", received)
@@ -90,7 +91,7 @@ func main() {
 	} else {
 		log.Printf("Prepared encrypted second message: %v", msg)
 	}
-	incoming <- client.Message{ClientId: clientMac, Message: msg}
+	incoming <- client.Message{ClientId: clientMac2, Message: msg}
 	recvMessage = readOrFail(fakeServer.GetInbox(), "decrypted message in Inbox")
 	log.Printf("Received second encrypted message: %v", recvMessage)
 
@@ -104,7 +105,7 @@ func main() {
 	for j := 0; j < 20; j++ {
 		for i := 1; i < len(buffer); i++ {
 			msg = session.Encrypt(buffer[:i])
-			incoming <- client.Message{ClientId: clientMac, Message: msg}
+			incoming <- client.Message{ClientId: clientMac2, Message: msg}
 			select {
 			case handled := <-fakeServer.GetInbox():
 				if bytes.Compare(buffer[:i], handled.Message) != 0 {

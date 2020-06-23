@@ -4,6 +4,8 @@ import (
 	"crypto"
 	"crypto/cipher"
 	"crypto/ed25519"
+	"hash"
+	"hash/fnv"
 	"io"
 	"log"
 
@@ -23,7 +25,7 @@ type Server struct {
 	outbox           chan client.Message
 	incomingMessages <-chan client.Message
 	stopped          chan bool
-	clients          map[uint64]*client.Client
+	clients          map[uint64]map[uint64]*client.Client
 }
 
 type ClientConfig struct {
@@ -86,8 +88,10 @@ func (s *Server) calculateKeys(encodedPrivateKey string) ([]byte, error) {
 func (s *Server) Close() {
 	close(s.stopped)
 	if s.clients != nil {
-		for _, c := range s.clients {
-			c.Close()
+		for _, cmap := range s.clients {
+			for _, c := range cmap {
+				c.Close()
+			}
 		}
 	}
 	close(s.inbox)
@@ -102,6 +106,23 @@ func (s *Server) GetOutbox() chan<- client.Message {
 	return s.outbox
 }
 
+func (s *Server) lookupClient(id interface{}) *client.Client {
+	cmap := s.clients[level1Key(id)]
+	if cmap != nil {
+		if len(cmap) <= 4 {
+			// for small maps, we just iterate through them instead of second key lookup
+			for _, can := range cmap {
+				if can.ClientId == id {
+					return can
+				}
+			}
+		} else {
+			return cmap[level2Key(id)]
+		}
+	}
+	return nil
+}
+
 func (s *Server) forwardIncoming() {
 	for {
 		select {
@@ -113,7 +134,7 @@ func (s *Server) forwardIncoming() {
 			if !open {
 				return
 			}
-			c := s.clients[toKey(m.ClientId)]
+			c := s.lookupClient(m.ClientId)
 			if c != nil {
 				c.NewOutgoingMessage(m)
 			} else {
@@ -125,7 +146,7 @@ func (s *Server) forwardIncoming() {
 				close(s.stopped)
 				return
 			}
-			c := s.clients[toKey(m.ClientId)]
+			c := s.lookupClient(m.ClientId)
 			if c != nil {
 				c.NewIncomingMessage(m)
 			} else {
@@ -136,20 +157,38 @@ func (s *Server) forwardIncoming() {
 }
 
 func (s *Server) load(clients []ClientConfig, sessionPath string, sessionCipher cipher.AEAD, outgoingMessages chan<- client.Message) error {
-	s.clients = make(map[uint64]*client.Client)
+	s.clients = make(map[uint64]map[uint64]*client.Client)
 	for _, c := range clients {
 		newClient, err := client.NewClient(sessionPath, sessionCipher, c.ClientId, c.PublicKey, outgoingMessages, s.inbox, s)
 		if err != nil {
 			return err
 		}
-		s.clients[toKey(c.ClientId)] = newClient
+		key1 := level1Key(c.ClientId)
+		key2 := level2Key(c.ClientId)
+		nestedMap := s.clients[key1]
+		if nestedMap == nil {
+			nestedMap = make(map[uint64]*client.Client)
+			s.clients[key1] = nestedMap
+		}
+		if nestedMap[key2] != nil {
+			log.Fatal("Hash collision at second level hash, should not be possible, maybe you can enrich the identifier with some better data?")
+		}
+		nestedMap[key2] = newClient
 	}
 
 	return nil
 }
 
-func toKey(id interface{}) uint64 {
-	result, err := hashstructure.Hash(id, &hashstructure.HashOptions{Hasher: xxhash.New64()})
+func level1Key(id interface{}) uint64 {
+	return calcHash(id, xxhash.New64())
+}
+
+func level2Key(id interface{}) uint64 {
+	return calcHash(id, fnv.New64a())
+}
+
+func calcHash(id interface{}, hasher hash.Hash64) uint64 {
+	result, err := hashstructure.Hash(id, &hashstructure.HashOptions{Hasher: hasher})
 	if err != nil {
 		log.Fatalf("Cannot calculate has for: %v", id)
 	}
