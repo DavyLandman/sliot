@@ -1,10 +1,10 @@
 package longterm
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"io/ioutil"
+
+	"github.com/btcsuite/btcutil/bech32"
 
 	"crypto/ed25519"
 )
@@ -23,17 +23,43 @@ func CalculatePublic(privateKey []byte) (publicKey []byte, err error) {
 }
 
 func GenerateKeyPair() (longTermPublic, longTermPrivate []byte, err error) {
-	return ed25519.GenerateKey(rand.Reader)
+	return ed25519.GenerateKey(nil)
 }
 
-func KeyToString(key []byte) string {
-	return base64.StdEncoding.EncodeToString(key)
+const publicKeyType = "sliot-public"
+const privateKeyType = "sliot-private"
+
+func KeyToString(key []byte) (string, error) {
+	keyType := publicKeyType
+	if len(key) == ed25519.PrivateKeySize {
+		keyType = privateKeyType
+		key = key[:32] // we only encode the private key and recover it when reading back
+	}
+	converted, err := bech32.ConvertBits(key, 8, 5, true)
+	if err != nil {
+		return "", err
+	}
+	return bech32.Encode(keyType, converted)
 }
 
 func StringToKey(key string) (result []byte, err error) {
-	result, err = base64.StdEncoding.DecodeString(key)
-	if err == nil && (len(result) != ed25519.PrivateKeySize && len(result) != ed25519.PublicKeySize) {
-		err = fmt.Errorf("Key file not right size: %v", len(result))
+	keyType, encodedResult, err := bech32.Decode(key)
+	if err != nil {
+		return
+	}
+	result, err = bech32.ConvertBits(encodedResult, 5, 8, false)
+	if err == nil {
+		if len(result) != 32 {
+			err = fmt.Errorf("Key not right size: %v", len(result))
+			result = nil
+		} else if keyType == publicKeyType {
+			return
+		} else if keyType == privateKeyType {
+			result = ed25519.NewKeyFromSeed(result)
+		} else {
+			err = fmt.Errorf("Incorrect keytype, expected: %v or %v but got: %v", publicKeyType, privateKeyType, keyType)
+			result = nil
+		}
 	}
 	return
 }
@@ -43,12 +69,5 @@ func ReadPrivateKey(fileName string) (privateKey []byte, err error) {
 	if err != nil {
 		return
 	}
-
-	privateKey = make([]byte, ed25519.PrivateKeySize)
-	n, err := base64.StdEncoding.Decode(privateKey, b)
-	if err == nil && n != ed25519.PrivateKeySize {
-		err = fmt.Errorf("Key file not right size: %v", n)
-	}
-
-	return
+	return StringToKey(string(b))
 }

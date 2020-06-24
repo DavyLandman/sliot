@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/cipher"
+	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -12,13 +13,10 @@ import (
 	"os"
 	"path"
 	"time"
-
-	"golang.org/x/crypto/curve25519"
 )
 
 type Client struct {
 	ClientId          interface{}
-	PublicKey         []byte
 	sessionFile       string
 	sessionCipher     cipher.AEAD
 	encrypted         EncryptedClient
@@ -38,18 +36,17 @@ type Message struct {
 
 func NewClient(sessionPath string, sessionCipher cipher.AEAD, clientId interface{}, publicKey []byte,
 	outgoingMessages chan<- Message, decryptedMessages chan<- Message, signer crypto.Signer) (*Client, error) {
-	if len(publicKey) != curve25519.ScalarSize {
+	if len(publicKey) != ed25519.PublicKeySize {
 		return nil, fmt.Errorf("Client public key of invalid size: %v", len(publicKey))
 	}
 	var result Client
 	result.ClientId = clientId
-	result.PublicKey = append([]byte(nil), publicKey...)
 	result.signer = signer
 	result.incomingMessages = make(chan Message, 1024)
 	result.messagesToEncrypt = make(chan Message, 1024)
 	result.outgoingMessages = outgoingMessages
 	result.decryptedMessages = decryptedMessages
-	result.encrypted.Initialize(result.PublicKey)
+	result.encrypted.Initialize(publicKey)
 
 	result.saveSession = make(chan bool, 10)
 	result.sessionCipher = sessionCipher
@@ -204,13 +201,4 @@ func (c *Client) periodicSessionBackup() {
 
 func fileName(root string, publicKey []byte) string {
 	return path.Join(root, base64.RawURLEncoding.EncodeToString(publicKey))
-}
-
-func MacToId(mac [6]byte) uint64 {
-	return uint64(mac[0]) |
-		uint64(mac[1])<<8 |
-		uint64(mac[2])<<16 |
-		uint64(mac[3])<<24 |
-		uint64(mac[4])<<32 |
-		uint64(mac[5])<<40
 }

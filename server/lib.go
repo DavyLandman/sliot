@@ -30,7 +30,7 @@ type Server struct {
 
 type ClientConfig struct {
 	ClientId  interface{}
-	PublicKey []byte
+	PublicKey string
 }
 
 func Start(clients []ClientConfig, dataPath, privateKey string, incomingMessages <-chan client.Message, outgoingMessages chan<- client.Message) (*Server, error) {
@@ -159,7 +159,11 @@ func (s *Server) forwardIncoming() {
 func (s *Server) load(clients []ClientConfig, sessionPath string, sessionCipher cipher.AEAD, outgoingMessages chan<- client.Message) error {
 	s.clients = make(map[uint64]map[uint64]*client.Client)
 	for _, c := range clients {
-		newClient, err := client.NewClient(sessionPath, sessionCipher, c.ClientId, c.PublicKey, outgoingMessages, s.inbox, s)
+		decodedKey, err := longterm.StringToKey(c.PublicKey)
+		if err != nil {
+			return err
+		}
+		newClient, err := client.NewClient(sessionPath, sessionCipher, c.ClientId, decodedKey, outgoingMessages, s.inbox, s)
 		if err != nil {
 			return err
 		}

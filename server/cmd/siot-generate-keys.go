@@ -34,7 +34,10 @@ func main() {
 			if err != nil {
 				log.Fatalf("Must supply public key or the private key file")
 			} else {
-				longTermPublicKey = longterm.KeyToString(encodedKey)
+				longTermPublicKey, err = longterm.KeyToString(encodedKey)
+				if err != nil {
+					log.Fatalf("Failure to encode key: %v", err)
+				}
 				log.Printf("Calculated public key: %v based on supplied private key\n", longTermPublicKey)
 			}
 		}
@@ -51,7 +54,11 @@ func generateServerKeys() {
 	if err != nil {
 		log.Fatalf("Failure to generate server keys: %v", err)
 	}
-	fmt.Println(longterm.KeyToString(longTermPrivateKey))
+	printedKey, err := longterm.KeyToString(longTermPrivateKey)
+	if err != nil {
+		log.Fatalf("Failure to pretty print server keys: %v", err)
+	}
+	fmt.Println(printedKey)
 }
 
 func printoutPublicKey(privateKeyFile string) {
@@ -60,7 +67,9 @@ func printoutPublicKey(privateKeyFile string) {
 		log.Fatalf("Failure to calculate the public key based on %v, error: %v", privateKeyFile, err)
 	}
 	fmt.Println("** Public key")
-	fmt.Printf("* base64: \t%v\n", longterm.KeyToString(publicKey))
+	if bech, err := longterm.KeyToString(publicKey); err != nil {
+		fmt.Printf("* bech32: \t%v\n", bech)
+	}
 	fmt.Printf("* c bytes:\t%v\n", byteArray(publicKey))
 }
 
@@ -87,7 +96,11 @@ func generateClientKeys(serverKey []byte, serverMac string) {
 		macByteArray(serverMac),
 	)
 	fmt.Println("For config.toml:")
-	fmt.Printf("publicKey = \"%v\"\n", longterm.KeyToString(longTermPublicKey))
+	printedKey, err := longterm.KeyToString(longTermPublicKey)
+	if err != nil {
+		log.Fatalf("Could not print key: %v", err)
+	}
+	fmt.Printf("publicKey = \"%v\"\n", printedKey)
 }
 
 func byteArray(bytes []byte) string {

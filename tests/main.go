@@ -24,22 +24,31 @@ func main() {
 
 	serverPublicKey, serverPrivateKey, err := longterm.GenerateKeyPair()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Key generation: %v", err)
 	}
 	clientPublicKey, clientPrivateKey, err := longterm.GenerateKeyPair()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Key generation: %v", err)
+	}
+	encodedServerPrivateKey, err := longterm.KeyToString(serverPrivateKey)
+	if err != nil {
+		log.Fatalf("Key encoding: %v", err)
+	}
+	encodedClientPublicKey, err := longterm.KeyToString(clientPublicKey)
+	if err != nil {
+		log.Fatalf("Key encoding: %v", err)
 	}
 
 	clientMac := [6]byte{0, 1, 2, 3, 4, 5}
-	clientConf := server.ClientConfig{clientMac, clientPublicKey}
+	clientConf := server.ClientConfig{ClientId: clientMac, PublicKey: encodedClientPublicKey}
 	clientMac2 := [6]byte{0, 1, 2, 3, 4, 5}
+	log.Printf("Starting server:\nkey:\t%v\nclient:\t%v", encodedServerPrivateKey, clientConf)
 
 	incoming := make(chan client.Message, 200)
 	outgoing := make(chan client.Message, 200)
-	fakeServer, err := server.Start([]server.ClientConfig{clientConf}, dataFolder, longterm.KeyToString(serverPrivateKey), incoming, outgoing)
+	fakeServer, err := server.Start([]server.ClientConfig{clientConf}, dataFolder, encodedServerPrivateKey, incoming, outgoing)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Server start: ", err)
 	}
 
 	fakeClient, err := clientlib.CreateConfig(clientPrivateKey, clientPublicKey, serverPublicKey)
