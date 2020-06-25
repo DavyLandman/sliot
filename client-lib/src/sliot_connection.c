@@ -93,7 +93,7 @@ bool sliot_handshake_finish(const sliot_config *cfg, sliot_handshake *handshake,
         compact_wipe(handshake->private_key, sizeof(handshake->private_key));
 
         compact_x25519_derive_encryption_key(session->shared_key, sizeof(session->shared_key),
-            shared_key, cfg->server_long_term_public, cfg->long_term_public);
+            shared_key, cfg->server_long_term_public, cfg->long_term_secret + 32);
         crypto_feed_watchdog();
         session->valid_session = true;
         session->receive_counter = 0;
@@ -171,7 +171,7 @@ uint16_t sliot_decrypt(sliot_session *session, const uint8_t *ciphertext, size_t
             ad, __SLIOT_UINT16_SIZE, 
             ciphertext, ((size_t)size) + RFC_8439_TAG_SIZE
     );
-    if (actual_size >= 0) {
+    if (actual_size != -1) {
         session->receive_counter = counter;
         return (uint16_t)actual_size;
     }

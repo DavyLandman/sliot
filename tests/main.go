@@ -22,36 +22,22 @@ func main() {
 		log.Fatal(err)
 	}
 
-	serverPublicKey, serverPrivateKey, err := longterm.GenerateKeyPair()
-	if err != nil {
-		log.Fatalf("Key generation: %v", err)
-	}
-	clientPublicKey, clientPrivateKey, err := longterm.GenerateKeyPair()
-	if err != nil {
-		log.Fatalf("Key generation: %v", err)
-	}
-	encodedServerPrivateKey, err := longterm.KeyToString(serverPrivateKey)
-	if err != nil {
-		log.Fatalf("Key encoding: %v", err)
-	}
-	encodedClientPublicKey, err := longterm.KeyToString(clientPublicKey)
-	if err != nil {
-		log.Fatalf("Key encoding: %v", err)
-	}
+	serverPublic, clientPrivate,
+		encodedServerPrivate, encodedClientPublic := genKeys()
 
 	clientMac := [6]byte{0, 1, 2, 3, 4, 5}
-	clientConf := server.ClientConfig{ClientId: clientMac, PublicKey: encodedClientPublicKey}
+	clientConf := server.ClientConfig{ClientId: clientMac, PublicKey: encodedClientPublic}
 	clientMac2 := [6]byte{0, 1, 2, 3, 4, 5}
-	log.Printf("Starting server:\nkey:\t%v\nclient:\t%v", encodedServerPrivateKey, clientConf)
+	log.Printf("Starting server:\nkey:\t%v\nclient:\t%v", encodedServerPrivate, clientConf)
 
 	incoming := make(chan client.Message, 200)
 	outgoing := make(chan client.Message, 200)
-	fakeServer, err := server.Start([]server.ClientConfig{clientConf}, dataFolder, encodedServerPrivateKey, incoming, outgoing)
+	fakeServer, err := server.Start([]server.ClientConfig{clientConf}, dataFolder, encodedServerPrivate, incoming, outgoing)
 	if err != nil {
 		log.Fatal("Server start: ", err)
 	}
 
-	fakeClient, err := clientlib.CreateConfig(clientPrivateKey, clientPublicKey, serverPublicKey)
+	fakeClient, err := clientlib.CreateConfig(clientPrivate, serverPublic)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -127,6 +113,26 @@ func main() {
 	}
 	log.Println("Succeeded")
 
+}
+
+func genKeys() (sPublic, cPrivate []byte, esPrivate, ecPublic string) {
+	sPublic, sPrivate, err := longterm.GenerateKeyPair()
+	if err != nil {
+		log.Fatal("Key generation: ", err)
+	}
+	cPublic, cPrivate, err := longterm.GenerateKeyPair()
+	if err != nil {
+		log.Fatal("Key generation: ", err)
+	}
+	esPrivate, err = longterm.KeyToString(sPrivate)
+	if err != nil {
+		log.Fatal("Key encoding: ", err)
+	}
+	ecPublic, err = longterm.KeyToString(cPublic)
+	if err != nil {
+		log.Fatal("Key encoding: ", err)
+	}
+	return
 }
 
 func readOrFail(source <-chan client.Message, failMessage string) *client.Message {

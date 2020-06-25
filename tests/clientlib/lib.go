@@ -41,13 +41,19 @@ func safeCopy32(target *[32]C.uint8_t, source []byte) error {
 	return nil
 }
 
-func CreateConfig(longTermSecret, longTermPublic, serverLongTermPublic []byte) (*Config, error) {
-	var result Config
-	err := safeCopy32(&result.actual.long_term_secret, longTermSecret)
-	if err != nil {
-		return nil, err
+func safeCopy64(target *[64]C.uint8_t, source []byte) error {
+	if len(source) < 64 {
+		return fmt.Errorf("Incorrect source length: %v", len(source))
 	}
-	err = safeCopy32(&result.actual.long_term_public, longTermPublic)
+	for i := range source[:64] {
+		target[i] = (C.uint8_t)(source[i])
+	}
+	return nil
+}
+
+func CreateConfig(longTermSecret, serverLongTermPublic []byte) (*Config, error) {
+	var result Config
+	err := safeCopy64(&result.actual.long_term_secret, longTermSecret)
 	if err != nil {
 		return nil, err
 	}
