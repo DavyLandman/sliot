@@ -13,6 +13,8 @@ import (
 	"os"
 	"path"
 	"time"
+
+	"github.com/DavyLandman/sliot/server/data"
 )
 
 type Client struct {
@@ -20,30 +22,24 @@ type Client struct {
 	sessionFile       string
 	sessionCipher     cipher.AEAD
 	encrypted         EncryptedClient
-	outgoingMessages  chan<- Message
-	incomingMessages  chan Message
-	decryptedMessages chan<- Message
-	messagesToEncrypt chan Message
+	outgoingMessages  chan<- data.Message
+	incomingMessages  chan data.Message
+	decryptedMessages chan<- data.Message
+	messagesToEncrypt chan data.Message
 	signer            crypto.Signer
 	saveSession       chan bool
 }
 
-type Message struct {
-	Received time.Time
-	ClientId interface{}
-	Message  []byte
-}
-
 func NewClient(sessionPath string, sessionCipher cipher.AEAD, clientId interface{}, publicKey []byte,
-	outgoingMessages chan<- Message, decryptedMessages chan<- Message, signer crypto.Signer) (*Client, error) {
+	outgoingMessages chan<- data.Message, decryptedMessages chan<- data.Message, signer crypto.Signer) (*Client, error) {
 	if len(publicKey) != ed25519.PublicKeySize {
 		return nil, fmt.Errorf("Client public key of invalid size: %v", len(publicKey))
 	}
 	var result Client
 	result.ClientId = clientId
 	result.signer = signer
-	result.incomingMessages = make(chan Message, 1024)
-	result.messagesToEncrypt = make(chan Message, 1024)
+	result.incomingMessages = make(chan data.Message, 1024)
+	result.messagesToEncrypt = make(chan data.Message, 1024)
 	result.outgoingMessages = outgoingMessages
 	result.decryptedMessages = decryptedMessages
 	result.encrypted.Initialize(publicKey)
@@ -71,11 +67,11 @@ func (c *Client) Close() {
 	close(c.saveSession)
 }
 
-func (c *Client) NewIncomingMessage(msg Message) {
+func (c *Client) NewIncomingMessage(msg data.Message) {
 	c.incomingMessages <- msg
 }
 
-func (c *Client) NewOutgoingMessage(msg Message) {
+func (c *Client) NewOutgoingMessage(msg data.Message) {
 	c.messagesToEncrypt <- msg
 }
 
@@ -117,21 +113,22 @@ func (c *Client) handleMessages() {
 			newMessage.Write(counter)
 			newMessage.Write(nonce)
 			newMessage.Write(ciphertext)
-			c.outgoingMessages <- Message{
+			c.outgoingMessages <- data.Message{
 				ClientId: m.ClientId,
 				Message:  newMessage.Bytes(),
+				Received: m.Received,
 			}
 		}
 	}
 }
 
-func (c *Client) handleKeyExchange(data []byte) {
-	if len(data) != 64+32 {
-		log.Printf("DH: not right sized message recevied %v\n", data)
+func (c *Client) handleKeyExchange(incoming []byte) {
+	if len(incoming) != 64+32 {
+		log.Printf("DH: not right sized message recevied %v\n", incoming)
 		return
 	}
-	theirPublicKey := data[:32]
-	theirSignature := data[32:]
+	theirPublicKey := incoming[:32]
+	theirSignature := incoming[32:]
 	replyPublic := c.encrypted.KeyExchangeReply(theirPublicKey, theirSignature, c.signer.Public().([]byte))
 	if replyPublic != nil {
 		replySignature, err := c.signer.Sign(nil, replyPublic, crypto.Hash(0))
@@ -142,7 +139,7 @@ func (c *Client) handleKeyExchange(data []byte) {
 		response.WriteByte(0x01)
 		response.Write(replyPublic)
 		response.Write(replySignature)
-		c.outgoingMessages <- Message{
+		c.outgoingMessages <- data.Message{
 			ClientId: c.ClientId,
 			Message:  response.Bytes(),
 		}
@@ -154,8 +151,8 @@ func (c *Client) handleKeyExchange(data []byte) {
 	}
 }
 
-func (c *Client) handleNormalMessage(when time.Time, data []byte) {
-	reader := bytes.NewBuffer(data)
+func (c *Client) handleNormalMessage(when time.Time, incoming []byte) {
+	reader := bytes.NewBuffer(incoming)
 	var msgSize uint16
 	binary.Read(reader, binary.LittleEndian, &msgSize)
 	counter := reader.Next(2)
@@ -167,7 +164,7 @@ func (c *Client) handleNormalMessage(when time.Time, data []byte) {
 	}
 	plainMessage := c.encrypted.DecryptMessage(cipherText, counter, nonce)
 	if plainMessage != nil {
-		c.decryptedMessages <- Message{
+		c.decryptedMessages <- data.Message{
 			Received: when,
 			ClientId: c.ClientId,
 			Message:  plainMessage,

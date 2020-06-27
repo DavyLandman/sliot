@@ -12,7 +12,8 @@ import (
 	"github.com/OneOfOne/xxhash"
 	"github.com/mitchellh/hashstructure"
 
-	"github.com/DavyLandman/sliot/server/client"
+	"github.com/DavyLandman/sliot/server/data"
+	"github.com/DavyLandman/sliot/server/internal/client"
 	"github.com/DavyLandman/sliot/server/keys/longterm"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -21,9 +22,9 @@ import (
 type Server struct {
 	PublicKey        []byte
 	privateKey       []byte
-	inbox            chan client.Message
-	outbox           chan client.Message
-	incomingMessages <-chan client.Message
+	inbox            chan data.Message
+	outbox           chan data.Message
+	incomingMessages <-chan data.Message
 	stopped          chan bool
 	clients          map[uint64]map[uint64]*client.Client
 }
@@ -33,7 +34,7 @@ type ClientConfig struct {
 	PublicKey string
 }
 
-func Start(clients []ClientConfig, dataPath, privateKey string, incomingMessages <-chan client.Message, outgoingMessages chan<- client.Message) (*Server, error) {
+func Start(clients []ClientConfig, dataPath, privateKey string, incomingMessages <-chan data.Message, outgoingMessages chan<- data.Message) (*Server, error) {
 	var result Server
 	result.incomingMessages = incomingMessages
 	dataKey, err := result.calculateKeys(privateKey)
@@ -41,8 +42,8 @@ func Start(clients []ClientConfig, dataPath, privateKey string, incomingMessages
 		return nil, err
 	}
 	result.stopped = make(chan bool)
-	result.inbox = make(chan client.Message, 1024)
-	result.outbox = make(chan client.Message, 1024)
+	result.inbox = make(chan data.Message, 1024)
+	result.outbox = make(chan data.Message, 1024)
 
 	sessionCipher, err := chacha20poly1305.NewX(dataKey)
 	if err != nil {
@@ -98,11 +99,11 @@ func (s *Server) Close() {
 	close(s.outbox)
 }
 
-func (s *Server) GetInbox() <-chan client.Message {
+func (s *Server) GetInbox() <-chan data.Message {
 	return s.inbox
 }
 
-func (s *Server) GetOutbox() chan<- client.Message {
+func (s *Server) GetOutbox() chan<- data.Message {
 	return s.outbox
 }
 
@@ -156,7 +157,7 @@ func (s *Server) forwardIncoming() {
 	}
 }
 
-func (s *Server) load(clients []ClientConfig, sessionPath string, sessionCipher cipher.AEAD, outgoingMessages chan<- client.Message) error {
+func (s *Server) load(clients []ClientConfig, sessionPath string, sessionCipher cipher.AEAD, outgoingMessages chan<- data.Message) error {
 	s.clients = make(map[uint64]map[uint64]*client.Client)
 	for _, c := range clients {
 		decodedKey, err := longterm.StringToKey(c.PublicKey)

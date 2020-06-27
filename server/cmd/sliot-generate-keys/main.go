@@ -13,14 +13,11 @@ import (
 func main() {
 	var generatePrivateKey, printPublicKey bool
 	var longTermPublicKey, privateKeyFile string
-	var serverMac string
 
 	flag.BoolVar(&generatePrivateKey, "generatePrivateKey", false, "Generate new long-term server key")
 	flag.BoolVar(&printPublicKey, "printPublicKey", false, "Print public key corresponding to private key of server")
 	flag.StringVar(&privateKeyFile, "privateKey", "", "private key to extract the public key from")
-
 	flag.StringVar(&longTermPublicKey, "serverPublicKey", "", "provide long term public key in base64 format for the server")
-	flag.StringVar(&serverMac, "serverMac", "00:00:00:00:00:00", "mac of the server")
 	flag.Parse()
 
 	if generatePrivateKey {
@@ -89,11 +86,9 @@ func generateClientKeys(serverKey []byte, serverMac string) {
 	}
 
 	fmt.Println("For client c code:")
-	fmt.Printf("static struct siot_config main_config = {\n\t%v, \n\t%v, \n\t%v, \n\t%v\n}\n",
+	fmt.Printf("static struct siot_config main_config = {\n\t%v, \n\t%v\n}\n",
 		byteArray(longTermPrivateKey),
-		byteArray(longTermPublicKey),
 		byteArray(serverKey),
-		macByteArray(serverMac),
 	)
 	fmt.Println("For config.toml:")
 	printedKey, err := longterm.KeyToString(longTermPublicKey)
