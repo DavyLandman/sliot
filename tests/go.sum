@@ -1,4 +1,3 @@
-github.com/DavyLandman/sliot v0.0.0-20200625203526-ab89bbd853e4 h1:jc8L3AI9H492cCAf7Eu3UX0QtQ0NGeLLgJdYh8RPk4M=
 github.com/OneOfOne/xxhash v1.2.8 h1:31czK/TI9sNkxIKfaUfGlU47BAxQ0ztGgd9vPyqimf8=
 github.com/OneOfOne/xxhash v1.2.8/go.mod h1:eZbhyaAYD41SGSSsnmcpxVoRiQ/MPUTjUdIIOT9Um7Q=
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
