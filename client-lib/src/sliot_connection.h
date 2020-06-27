@@ -10,7 +10,7 @@
 
 typedef struct sliot_config{
     uint8_t long_term_secret[64];
-    uint8_t server_long_term_public[SLIOT_KEY_SIZE];
+    uint8_t server_long_term_public[32];
 } sliot_config;
 
 typedef struct sliot_handshake {
