@@ -74,7 +74,8 @@ func (cfg *Config) HandshakeInit() (*Handshake, []byte) {
 func (h *Handshake) Finish(response []byte) *Session {
 	var result Session
 	result.config = h.config
-	if C.sliot_handshake_finish(&h.config.actual, &h.actual, &result.actual, (*C.uint8_t)(&response[0]), C.size_t(len(response))) {
+	success := C.sliot_handle_incoming(&h.config.actual, &h.actual, &result.actual, (*C.uint8_t)(&response[0]), C.size_t(len(response)), nil)
+	if success == 0 {
 		return &result
 	}
 	return nil
@@ -93,7 +94,7 @@ func (s *Session) Encrypt(plaintext []byte) (ciphertext []byte) {
 
 func (s *Session) Decrypt(ciphertext []byte) (plaintext []byte) {
 	result := make([]byte, len(ciphertext))
-	decrypted := C.sliot_decrypt(&s.actual, (*C.uint8_t)(&ciphertext[0]), C.size_t(len(ciphertext)), (*C.uint8_t)(&result[0]))
+	decrypted := C.sliot_handle_incoming(&s.config.actual, nil, &s.actual, (*C.uint8_t)(&ciphertext[0]), C.size_t(len(ciphertext)), (*C.uint8_t)(&result[0]))
 	if decrypted > 0 {
 		return result[:decrypted]
 	}

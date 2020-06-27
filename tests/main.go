@@ -106,7 +106,7 @@ func main() {
 				if bytes.Compare(buffer[:i], handled.Message) != 0 {
 					log.Fatalf("Failure to receive %v bytes", i)
 				}
-			case <-time.After(100 * time.Millisecond):
+			case <-time.After(1000 * time.Millisecond):
 				log.Fatalf("Message never received: %v at size: %v", msg[:16], i)
 			}
 		}

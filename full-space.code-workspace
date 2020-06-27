@@ -15,5 +15,10 @@
 		{
 			"path": ".github"
 		}
-	]
+	],
+	"settings": {
+		"files.associations": {
+			"functional": "c"
+		}
+	}
 }
